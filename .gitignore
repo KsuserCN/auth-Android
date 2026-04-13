@@ -16,3 +16,5 @@ local.properties
 
 .env.*
 .env
+.idea/
+*.iml
