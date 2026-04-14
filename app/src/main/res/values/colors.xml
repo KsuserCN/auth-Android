@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <color name="brand_gold_200">#FFFFE3A1</color>
+    <color name="brand_gold_500">#FFFFB90F</color>
+    <color name="brand_gold_700">#FFC98A00</color>
+    <color name="brand_gold_bg">#FFFFFBF2</color>
+    <color name="brand_gold_surface">#FFFFFCF7</color>
+    <color name="brand_gold_on_primary">#FF2F2200</color>
+
+    <!-- Keep legacy names for compatibility, but map them to gold shades. -->
+    <color name="purple_200">@color/brand_gold_200</color>
+    <color name="purple_500">@color/brand_gold_500</color>
+    <color name="purple_700">@color/brand_gold_700</color>
+    <color name="teal_200">@color/brand_gold_200</color>
+    <color name="teal_700">@color/brand_gold_700</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>

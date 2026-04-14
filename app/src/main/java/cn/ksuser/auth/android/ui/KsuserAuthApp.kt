@@ -9,6 +9,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +63,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -89,7 +91,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -114,6 +115,10 @@ import cn.ksuser.auth.android.data.model.SensitiveVerificationStatus
 import cn.ksuser.auth.android.data.model.TotpRegistrationOptions
 import cn.ksuser.auth.android.data.model.TotpStatus
 import cn.ksuser.auth.android.data.model.UserProfile
+import cn.ksuser.auth.android.ui.theme.GoldGradientBottomDark
+import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
+import cn.ksuser.auth.android.ui.theme.GoldGradientTopDark
+import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
 import kotlinx.coroutines.launch
 
 private enum class MainDestination(
@@ -171,12 +176,14 @@ fun KsuserAuthApp() {
 
 @Composable
 private fun LoadingScreen() {
+    val darkTheme = isSystemInDarkTheme()
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFF6F2E8), Color(0xFFE6F0F8)),
+                    if (darkTheme) listOf(GoldGradientTopDark, GoldGradientBottomDark)
+                    else listOf(GoldGradientTopLight, GoldGradientBottomLight),
                 ),
             ),
         contentAlignment = Alignment.Center,
@@ -196,6 +203,7 @@ private fun AuthFlowScreen(
     viewModel: AppViewModel,
     snackbarHostState: SnackbarHostState,
 ) {
+    val darkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
     val activity = context as? Activity
     var authTab by rememberSaveable { mutableStateOf(0) }
@@ -219,7 +227,8 @@ private fun AuthFlowScreen(
                 .padding(innerPadding)
                 .background(
                     Brush.linearGradient(
-                        listOf(Color(0xFFF7EFE4), Color(0xFFE7F1F7)),
+                        if (darkTheme) listOf(GoldGradientTopDark, GoldGradientBottomDark)
+                        else listOf(GoldGradientTopLight, GoldGradientBottomLight),
                     ),
                 )
                 .padding(20.dp),
@@ -227,7 +236,7 @@ private fun AuthFlowScreen(
         ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.94f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
                 shape = RoundedCornerShape(28.dp),
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
@@ -483,7 +492,7 @@ private fun AuthFlowScreen(
 private fun PasskeyInfoBlock() {
     val environment = EnvironmentProvider.current
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F7FE)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -532,7 +541,12 @@ private fun MainShell(
                         } ?: "Ksuser",
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFEEE5D2)),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.primary,
+                ),
                 actions = {
                     IconButton(onClick = { viewModel.refreshCurrentUser() }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "刷新用户信息")
@@ -544,7 +558,9 @@ private fun MainShell(
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+            ) {
                 destinations.forEach { destination ->
                     val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
                     NavigationBarItem(
@@ -560,6 +576,13 @@ private fun MainShell(
                         },
                         icon = { Icon(destination.icon, contentDescription = destination.label) },
                         label = { Text(destination.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -620,10 +643,16 @@ private fun HomeScreen(
     val env = EnvironmentProvider.current
     val context = LocalContext.current
     val appIdentity = remember(context) { AppIdentityProvider.current(context) }
+    val darkTheme = isSystemInDarkTheme()
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFFFBF6EE), Color(0xFFF4FAFD))))
+            .background(
+                Brush.verticalGradient(
+                    if (darkTheme) listOf(GoldGradientTopDark, GoldGradientBottomDark)
+                    else listOf(GoldGradientTopLight, GoldGradientBottomLight),
+                ),
+            )
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -675,7 +704,7 @@ private fun OverviewCard(
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -803,7 +832,12 @@ private fun ProfileFieldCard(
     onSave: (String) -> Unit,
 ) {
     var draft by rememberSaveable(value) { mutableStateOf(value) }
-    Card(shape = RoundedCornerShape(20.dp)) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+        ),
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
@@ -894,7 +928,12 @@ private fun SecurityScreen(
             },
         )
 
-        Card(shape = RoundedCornerShape(20.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+            ),
+        ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("安全偏好", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 SettingSwitchRow("启用 MFA", settings?.mfaEnabled == true) { checked ->
@@ -963,7 +1002,12 @@ private fun SecurityScreen(
             }
         }
 
-        Card(shape = RoundedCornerShape(20.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+            ),
+        ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("敏感操作验证", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
@@ -985,7 +1029,12 @@ private fun SecurityScreen(
             }
         }
 
-        Card(shape = RoundedCornerShape(20.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+            ),
+        ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("TOTP", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("已启用: ${totpStatus?.enabled == true}，剩余恢复码: ${totpStatus?.recoveryCodesCount ?: 0}")
@@ -1038,7 +1087,12 @@ private fun SecurityScreen(
             }
         }
 
-        Card(shape = RoundedCornerShape(20.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+            ),
+        ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Passkey", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(passkeyAvailabilityMessage)
@@ -1059,7 +1113,9 @@ private fun SecurityScreen(
                 passkeys.forEach { passkey ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F4EC)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
+                        ),
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(passkey.name, fontWeight = FontWeight.SemiBold)
@@ -1091,7 +1147,12 @@ private fun SecurityScreen(
             }
         }
 
-        Card(shape = RoundedCornerShape(20.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+            ),
+        ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("敏感操作", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("修改邮箱、修改密码、删除账号要求先完成上方敏感验证")
@@ -1587,7 +1648,12 @@ private fun SessionsScreen(
             item { CircularProgressIndicator() }
         }
         items(sessions) { session ->
-            Card(shape = RoundedCornerShape(20.dp)) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+                ),
+            ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "${session.browser ?: "未知浏览器"} / ${session.deviceType ?: "未知设备"}",
@@ -1675,7 +1741,12 @@ private fun LogsScreen(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(logs) { log ->
-                Card(shape = RoundedCornerShape(18.dp)) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f),
+                    ),
+                ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             "${log.operationType} / ${log.result}",
