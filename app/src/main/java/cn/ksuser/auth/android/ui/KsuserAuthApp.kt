@@ -280,7 +280,7 @@ private fun AuthFlowScreen(
                                 enabled = !state.isBusy,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text("使用 Passkey 完成 MFA")
+                                LoadingButtonContent(text = "使用 Passkey 完成 MFA", isLoading = state.isBusy)
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                         }
@@ -315,7 +315,7 @@ private fun AuthFlowScreen(
                             enabled = !state.isBusy && mfaCode.isNotBlank(),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(if (state.isBusy) "验证中..." else "完成 MFA")
+                            LoadingButtonContent(text = "完成 MFA", isLoading = state.isBusy)
                         }
                     } else {
                         TabRow(selectedTabIndex = authTab) {
@@ -352,7 +352,7 @@ private fun AuthFlowScreen(
                                         enabled = !state.isBusy && email.isNotBlank() && password.isNotBlank(),
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        Text(if (state.isBusy) "登录中..." else "密码登录")
+                                        LoadingButtonContent(text = "密码登录", isLoading = state.isBusy)
                                     }
                                 }
 
@@ -375,7 +375,7 @@ private fun AuthFlowScreen(
                                             onClick = { viewModel.sendLoginCode(email.trim()) },
                                             enabled = !state.isBusy && email.isNotBlank(),
                                         ) {
-                                            Text("发送")
+                                            LoadingButtonContent(text = "发送", isLoading = state.isBusy)
                                         }
                                     }
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -384,7 +384,7 @@ private fun AuthFlowScreen(
                                         enabled = !state.isBusy && email.isNotBlank() && code.isNotBlank(),
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        Text(if (state.isBusy) "登录中..." else "验证码登录")
+                                        LoadingButtonContent(text = "验证码登录", isLoading = state.isBusy)
                                     }
                                 }
 
@@ -412,7 +412,7 @@ private fun AuthFlowScreen(
                                         enabled = !state.isBusy && passkeyAvailability == PasskeyAvailability.Available,
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        Text(if (state.isBusy) "认证中..." else "使用 Passkey 登录")
+                                        LoadingButtonContent(text = "使用 Passkey 登录", isLoading = state.isBusy)
                                     }
                                 }
                             }
@@ -458,7 +458,7 @@ private fun AuthFlowScreen(
                                     onClick = { viewModel.sendRegisterCode(email.trim()) },
                                     enabled = !state.isBusy && email.isNotBlank(),
                                 ) {
-                                    Text("发送")
+                                    LoadingButtonContent(text = "发送", isLoading = state.isBusy)
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
@@ -478,7 +478,7 @@ private fun AuthFlowScreen(
                                     registerCode.isNotBlank(),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text(if (state.isBusy) "注册中..." else "创建账号")
+                                LoadingButtonContent(text = "创建账号", isLoading = state.isBusy)
                             }
                         }
                     }
@@ -779,27 +779,19 @@ private fun ProfileScreen(
 
         ProfileFieldCard("用户名", username) { value ->
             username = value
-            scope.launch {
-                runProfileUpdate(container, "username", username, onProfileUpdated, onMessage)
-            }
+            runProfileUpdate(container, "username", username, onProfileUpdated, onMessage)
         }
         ProfileFieldCard("真实姓名", realName) { value ->
             realName = value
-            scope.launch {
-                runProfileUpdate(container, "realName", realName, onProfileUpdated, onMessage)
-            }
+            runProfileUpdate(container, "realName", realName, onProfileUpdated, onMessage)
         }
         ProfileFieldCard("地区", region) { value ->
             region = value
-            scope.launch {
-                runProfileUpdate(container, "region", region, onProfileUpdated, onMessage)
-            }
+            runProfileUpdate(container, "region", region, onProfileUpdated, onMessage)
         }
         ProfileFieldCard("个人简介", bio, singleLine = false) { value ->
             bio = value
-            scope.launch {
-                runProfileUpdate(container, "bio", bio, onProfileUpdated, onMessage)
-            }
+            runProfileUpdate(container, "bio", bio, onProfileUpdated, onMessage)
         }
         OverviewCard(
             title = "账号标识",
@@ -829,7 +821,7 @@ private fun ProfileFieldCard(
     title: String,
     value: String,
     singleLine: Boolean = true,
-    onSave: (String) -> Unit,
+    onSave: suspend (String) -> Unit,
 ) {
     var draft by rememberSaveable(value) { mutableStateOf(value) }
     Card(
@@ -848,9 +840,7 @@ private fun ProfileFieldCard(
                 singleLine = singleLine,
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = { onSave(draft) }) {
-                Text("保存$title")
-            }
+            LoadingButton(text = "保存$title", onClick = { onSave(draft) })
         }
     }
 }
@@ -1039,47 +1029,39 @@ private fun SecurityScreen(
                 Text("TOTP", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("已启用: ${totpStatus?.enabled == true}，剩余恢复码: ${totpStatus?.recoveryCodesCount ?: 0}")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        scope.launch {
-                            runCatching { container.securityRepository.getTotpRegistrationOptions() }
-                                .onSuccess { pendingTotpSetup = it }
-                                .onFailure { onMessage(it.message ?: "生成 TOTP 选项失败") }
+                    LoadingButton(text = "生成 TOTP 注册选项", onClick = {
+                        runCatching { container.securityRepository.getTotpRegistrationOptions() }
+                            .onSuccess { pendingTotpSetup = it }
+                            .onFailure { onMessage(it.message ?: "生成 TOTP 选项失败") }
+                    })
+                    LoadingOutlinedButton(text = "禁用", onClick = {
+                        val disabled = runCatching { container.securityRepository.disableTotp() }
+                            .onFailure { onMessage(it.message ?: "禁用失败") }
+                            .isSuccess
+                        if (disabled) {
+                            reloadAll()
+                            onMessage("TOTP 已禁用")
                         }
-                    }) { Text("生成 TOTP 注册选项") }
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            val disabled = runCatching { container.securityRepository.disableTotp() }
-                                .onFailure { onMessage(it.message ?: "禁用失败") }
-                                .isSuccess
-                            if (disabled) {
-                                reloadAll()
-                                onMessage("TOTP 已禁用")
-                            }
-                        }
-                    }) { Text("禁用") }
+                    })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            recoveryCodes = runCatching { container.securityRepository.getRecoveryCodes() }
-                                .getOrElse {
-                                    onMessage(it.message ?: "获取恢复码失败")
-                                    emptyList()
-                                }
-                        }
-                    }) { Text("查看恢复码") }
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            val newCodes = runCatching { container.securityRepository.regenerateRecoveryCodes() }
-                                .onFailure { onMessage(it.message ?: "重生恢复码失败") }
-                                .getOrNull()
-                            if (newCodes != null) {
-                                recoveryCodes = newCodes
-                                reloadAll()
-                                onMessage("恢复码已重新生成")
+                    LoadingOutlinedButton(text = "查看恢复码", onClick = {
+                        recoveryCodes = runCatching { container.securityRepository.getRecoveryCodes() }
+                            .getOrElse {
+                                onMessage(it.message ?: "获取恢复码失败")
+                                emptyList()
                             }
+                    })
+                    LoadingOutlinedButton(text = "重生恢复码", onClick = {
+                        val newCodes = runCatching { container.securityRepository.regenerateRecoveryCodes() }
+                            .onFailure { onMessage(it.message ?: "重生恢复码失败") }
+                            .getOrNull()
+                        if (newCodes != null) {
+                            recoveryCodes = newCodes
+                            reloadAll()
+                            onMessage("恢复码已重新生成")
                         }
-                    }) { Text("重生恢复码") }
+                    })
                 }
                 if (recoveryCodes.isNotEmpty()) {
                     Text(recoveryCodes.joinToString("  "), style = MaterialTheme.typography.bodySmall)
@@ -1129,17 +1111,15 @@ private fun SecurityScreen(
                                     renameTarget = passkey
                                     renameDraft = passkey.name
                                 }) { Text("重命名") }
-                                OutlinedButton(onClick = {
-                                    scope.launch {
-                                        val deleted = runCatching { container.securityRepository.deletePasskey(passkey.id) }
-                                            .onFailure { onMessage(it.message ?: "删除失败") }
-                                            .isSuccess
-                                        if (deleted) {
-                                            reloadAll()
-                                            onMessage("Passkey 已删除")
-                                        }
+                                LoadingOutlinedButton(text = "删除", onClick = {
+                                    val deleted = runCatching { container.securityRepository.deletePasskey(passkey.id) }
+                                        .onFailure { onMessage(it.message ?: "删除失败") }
+                                        .isSuccess
+                                    if (deleted) {
+                                        reloadAll()
+                                        onMessage("Passkey 已删除")
                                     }
-                                }) { Text("删除") }
+                                })
                             }
                         }
                     }
@@ -1168,9 +1148,7 @@ private fun SecurityScreen(
                     OutlinedButton(onClick = { showDeleteDialog = true }, enabled = sensitiveStatus?.verified == true) {
                         Text("删除账号")
                     }
-                    OutlinedButton(onClick = onLogoutAll) {
-                        Text("退出全部设备")
-                    }
+                    LoadingOutlinedButton(text = "退出全部设备", onClick = { onLogoutAll() })
                 }
             }
         }
@@ -1179,6 +1157,7 @@ private fun SecurityScreen(
     if (pendingTotpSetup != null) {
         AlertDialog(
             onDismissRequest = { pendingTotpSetup = null },
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
             title = { Text("TOTP 注册") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1195,21 +1174,19 @@ private fun SecurityScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val setup = pendingTotpSetup ?: return@TextButton
-                    scope.launch {
-                        val created = runCatching {
-                            container.securityRepository.verifyTotpRegistration(totpCode.trim(), setup.recoveryCodes)
-                        }.onFailure { onMessage(it.message ?: "TOTP 启用失败") }
-                            .isSuccess
-                        if (created) {
-                            pendingTotpSetup = null
-                            totpCode = ""
-                            reloadAll()
-                            onMessage("TOTP 已启用")
-                        }
+                LoadingTextButton(text = "确认启用", onClick = {
+                    val setup = pendingTotpSetup ?: return@LoadingTextButton
+                    val created = runCatching {
+                        container.securityRepository.verifyTotpRegistration(totpCode.trim(), setup.recoveryCodes)
+                    }.onFailure { onMessage(it.message ?: "TOTP 启用失败") }
+                        .isSuccess
+                    if (created) {
+                        pendingTotpSetup = null
+                        totpCode = ""
+                        reloadAll()
+                        onMessage("TOTP 已启用")
                     }
-                }) { Text("确认启用") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { pendingTotpSetup = null }) { Text("取消") }
@@ -1220,6 +1197,7 @@ private fun SecurityScreen(
     if (showAddPasskeyDialog) {
         AlertDialog(
             onDismissRequest = { showAddPasskeyDialog = false },
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
             title = { Text("新增 Passkey") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1232,26 +1210,24 @@ private fun SecurityScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                LoadingTextButton(text = "创建", onClick = {
                     if (activity == null) {
                         onMessage("当前上下文不支持 Passkey")
-                        return@TextButton
+                        return@LoadingTextButton
                     }
-                    scope.launch {
-                        val created = runCatching {
-                            val options = container.securityRepository.getPasskeyRegistrationOptions(newPasskeyName.trim())
-                            val payload = container.passkeyManager.createForRegistration(activity, options)
-                            container.securityRepository.verifyPasskeyRegistration(newPasskeyName.trim(), payload)
-                        }.onFailure { onMessage(it.message ?: "Passkey 创建失败") }
-                            .isSuccess
-                        if (created) {
-                            showAddPasskeyDialog = false
-                            newPasskeyName = "Ksuser Android"
-                            reloadAll()
-                            onMessage("Passkey 已添加")
-                        }
+                    val created = runCatching {
+                        val options = container.securityRepository.getPasskeyRegistrationOptions(newPasskeyName.trim())
+                        val payload = container.passkeyManager.createForRegistration(activity, options)
+                        container.securityRepository.verifyPasskeyRegistration(newPasskeyName.trim(), payload)
+                    }.onFailure { onMessage(it.message ?: "Passkey 创建失败") }
+                        .isSuccess
+                    if (created) {
+                        showAddPasskeyDialog = false
+                        newPasskeyName = "Ksuser Android"
+                        reloadAll()
+                        onMessage("Passkey 已添加")
                     }
-                }) { Text("创建") }
+                })
             },
             dismissButton = { TextButton(onClick = { showAddPasskeyDialog = false }) { Text("取消") } },
         )
@@ -1260,6 +1236,7 @@ private fun SecurityScreen(
     renameTarget?.let { passkey ->
         AlertDialog(
             onDismissRequest = { renameTarget = null },
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
             title = { Text("重命名 Passkey") },
             text = {
                 OutlinedTextField(
@@ -1269,19 +1246,17 @@ private fun SecurityScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val renamed = runCatching {
-                            container.securityRepository.renamePasskey(passkey.id, renameDraft.trim())
-                        }.onFailure { onMessage(it.message ?: "重命名失败") }
-                            .isSuccess
-                        if (renamed) {
-                            renameTarget = null
-                            reloadAll()
-                            onMessage("Passkey 已重命名")
-                        }
+                LoadingTextButton(text = "保存", onClick = {
+                    val renamed = runCatching {
+                        container.securityRepository.renamePasskey(passkey.id, renameDraft.trim())
+                    }.onFailure { onMessage(it.message ?: "重命名失败") }
+                        .isSuccess
+                    if (renamed) {
+                        renameTarget = null
+                        reloadAll()
+                        onMessage("Passkey 已重命名")
                     }
-                }) { Text("保存") }
+                })
             },
             dismissButton = {
                 TextButton(onClick = { renameTarget = null }) { Text("取消") }
@@ -1360,6 +1335,110 @@ private fun SettingSwitchRow(
     }
 }
 
+@Composable
+private fun LoadingButtonContent(
+    text: String,
+    isLoading: Boolean,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(text)
+    }
+}
+
+@Composable
+private fun LoadingButton(
+    text: String,
+    onClick: suspend () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(false) }
+    Button(
+        onClick = {
+            if (isLoading) return@Button
+            scope.launch {
+                isLoading = true
+                try {
+                    onClick()
+                } finally {
+                    isLoading = false
+                }
+            }
+        },
+        enabled = enabled && !isLoading,
+        modifier = modifier,
+    ) {
+        LoadingButtonContent(text = text, isLoading = isLoading)
+    }
+}
+
+@Composable
+private fun LoadingOutlinedButton(
+    text: String,
+    onClick: suspend () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = {
+            if (isLoading) return@OutlinedButton
+            scope.launch {
+                isLoading = true
+                try {
+                    onClick()
+                } finally {
+                    isLoading = false
+                }
+            }
+        },
+        enabled = enabled && !isLoading,
+        modifier = modifier,
+    ) {
+        LoadingButtonContent(text = text, isLoading = isLoading)
+    }
+}
+
+@Composable
+private fun LoadingTextButton(
+    text: String,
+    onClick: suspend () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(false) }
+    TextButton(
+        onClick = {
+            if (isLoading) return@TextButton
+            scope.launch {
+                isLoading = true
+                try {
+                    onClick()
+                } finally {
+                    isLoading = false
+                }
+            }
+        },
+        enabled = enabled && !isLoading,
+        modifier = modifier,
+    ) {
+        LoadingButtonContent(text = text, isLoading = isLoading)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PreferenceChips(
@@ -1391,7 +1470,6 @@ private fun SensitiveVerificationDialog(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<SensitiveVerificationStatus?>(null) }
     var selectedMethod by rememberSaveable { mutableStateOf("password") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -1409,6 +1487,7 @@ private fun SensitiveVerificationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
         title = { Text("敏感操作验证") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1436,15 +1515,11 @@ private fun SensitiveVerificationDialog(
                                 label = { Text("邮箱验证码") },
                                 modifier = Modifier.weight(1f),
                             )
-                            OutlinedButton(onClick = {
-                                scope.launch {
-                                    runCatching { container.securityRepository.sendSensitiveCode() }
-                                        .onSuccess { onMessage("验证码已发送") }
-                                        .onFailure { onMessage(it.message ?: "发送失败") }
-                                }
-                            }) {
-                                Text("发送")
-                            }
+                            LoadingOutlinedButton(text = "发送", onClick = {
+                                runCatching { container.securityRepository.sendSensitiveCode() }
+                                    .onSuccess { onMessage("验证码已发送") }
+                                    .onFailure { onMessage(it.message ?: "发送失败") }
+                            })
                         }
                     }
 
@@ -1470,31 +1545,29 @@ private fun SensitiveVerificationDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    runCatching {
-                        when (selectedMethod) {
-                            "password" -> container.securityRepository.verifySensitivePassword(password)
-                            "email-code" -> container.securityRepository.verifySensitiveEmailCode(code.trim())
-                            "totp" -> {
-                                if (recoveryMode) {
-                                    container.securityRepository.verifySensitiveTotp(recoveryCode = code.trim().uppercase())
-                                } else {
-                                    container.securityRepository.verifySensitiveTotp(code = code.trim())
-                                }
-                            }
-
-                            "passkey" -> {
-                                if (activity == null) error("当前上下文不支持 Passkey")
-                                val options = container.securityRepository.getPasskeySensitiveVerificationOptions()
-                                val payload = container.passkeyManager.getForAuthentication(activity, options)
-                                container.securityRepository.verifySensitivePasskey(options.challengeId, payload)
+            LoadingTextButton(text = "验证", onClick = {
+                runCatching {
+                    when (selectedMethod) {
+                        "password" -> container.securityRepository.verifySensitivePassword(password)
+                        "email-code" -> container.securityRepository.verifySensitiveEmailCode(code.trim())
+                        "totp" -> {
+                            if (recoveryMode) {
+                                container.securityRepository.verifySensitiveTotp(recoveryCode = code.trim().uppercase())
+                            } else {
+                                container.securityRepository.verifySensitiveTotp(code = code.trim())
                             }
                         }
-                    }.onSuccess { onVerified() }
-                        .onFailure { onMessage(it.message ?: "验证失败") }
-                }
-            }) { Text("验证") }
+
+                        "passkey" -> {
+                            if (activity == null) error("当前上下文不支持 Passkey")
+                            val options = container.securityRepository.getPasskeySensitiveVerificationOptions()
+                            val payload = container.passkeyManager.getForAuthentication(activity, options)
+                            container.securityRepository.verifySensitivePasskey(options.challengeId, payload)
+                        }
+                    }
+                }.onSuccess { onVerified() }
+                    .onFailure { onMessage(it.message ?: "验证失败") }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
@@ -1507,12 +1580,12 @@ private fun ChangeEmailDialog(
     onSuccess: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     var email by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
         title = { Text("修改邮箱") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1524,26 +1597,20 @@ private fun ChangeEmailDialog(
                         label = { Text("验证码") },
                         modifier = Modifier.weight(1f),
                     )
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            runCatching { container.securityRepository.sendChangeEmailCode(email.trim()) }
-                                .onSuccess { onMessage("邮箱验证码已发送") }
-                                .onFailure { onMessage(it.message ?: "发送失败") }
-                        }
-                    }) {
-                        Text("发送")
-                    }
+                    LoadingOutlinedButton(text = "发送", onClick = {
+                        runCatching { container.securityRepository.sendChangeEmailCode(email.trim()) }
+                            .onSuccess { onMessage("邮箱验证码已发送") }
+                            .onFailure { onMessage(it.message ?: "发送失败") }
+                    })
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    runCatching { container.securityRepository.changeEmail(email.trim(), code.trim()) }
-                        .onSuccess { onSuccess() }
-                        .onFailure { onMessage(it.message ?: "修改邮箱失败") }
-                }
-            }) { Text("提交") }
+            LoadingTextButton(text = "提交", onClick = {
+                runCatching { container.securityRepository.changeEmail(email.trim(), code.trim()) }
+                    .onSuccess { onSuccess() }
+                    .onFailure { onMessage(it.message ?: "修改邮箱失败") }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
@@ -1556,11 +1623,11 @@ private fun ChangePasswordDialog(
     onSuccess: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     var password by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
         title = { Text("修改密码") },
         text = {
             OutlinedTextField(
@@ -1570,13 +1637,11 @@ private fun ChangePasswordDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    runCatching { container.securityRepository.changePassword(password) }
-                        .onSuccess { onSuccess() }
-                        .onFailure { onMessage(it.message ?: "修改密码失败") }
-                }
-            }) { Text("提交") }
+            LoadingTextButton(text = "提交", onClick = {
+                runCatching { container.securityRepository.changePassword(password) }
+                    .onSuccess { onSuccess() }
+                    .onFailure { onMessage(it.message ?: "修改密码失败") }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
@@ -1589,11 +1654,11 @@ private fun DeleteAccountDialog(
     onDeleted: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     var confirmText by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
         title = { Text("删除账号") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1602,13 +1667,11 @@ private fun DeleteAccountDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    runCatching { container.securityRepository.deleteAccount(confirmText) }
-                        .onSuccess { onDeleted() }
-                        .onFailure { onMessage(it.message ?: "删除账号失败") }
-                }
-            }) { Text("删除") }
+            LoadingTextButton(text = "删除", onClick = {
+                runCatching { container.securityRepository.deleteAccount(confirmText) }
+                    .onSuccess { onDeleted() }
+                    .onFailure { onMessage(it.message ?: "删除账号失败") }
+            })
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
@@ -1620,7 +1683,6 @@ private fun SessionsScreen(
     onLogoutAll: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     var sessions by remember { mutableStateOf(emptyList<cn.ksuser.auth.android.data.model.SessionItem>()) }
     var loading by remember { mutableStateOf(true) }
 
@@ -1640,8 +1702,8 @@ private fun SessionsScreen(
     ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { scope.launch { reload() } }) { Text("刷新") }
-                OutlinedButton(onClick = onLogoutAll) { Text("退出全部设备") }
+                LoadingButton(text = "刷新", onClick = { reload() })
+                LoadingOutlinedButton(text = "退出全部设备", onClick = { onLogoutAll() })
             }
         }
         if (loading) {
@@ -1671,19 +1733,15 @@ private fun SessionsScreen(
                             Badge { Text("在线") }
                         }
                     }
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            val revoked = runCatching { container.sessionsRepository.revokeSession(session.id) }
-                                .onFailure { onMessage(it.message ?: "撤销失败") }
-                                .isSuccess
-                            if (revoked) {
-                                reload()
-                                onMessage("会话已撤销")
-                            }
+                    LoadingOutlinedButton(text = "撤销此会话", onClick = {
+                        val revoked = runCatching { container.sessionsRepository.revokeSession(session.id) }
+                            .onFailure { onMessage(it.message ?: "撤销失败") }
+                            .isSuccess
+                        if (revoked) {
+                            reload()
+                            onMessage("会话已撤销")
                         }
-                    }) {
-                        Text("撤销此会话")
-                    }
+                    })
                 }
             }
         }
@@ -1694,7 +1752,6 @@ private fun SessionsScreen(
 private fun LogsScreen(
     container: AppContainer,
 ) {
-    val scope = rememberCoroutineScope()
     var logs by remember { mutableStateOf(emptyList<cn.ksuser.auth.android.data.model.SensitiveLogItem>()) }
     var page by rememberSaveable { mutableStateOf(1) }
     var operationType by rememberSaveable { mutableStateOf("") }
@@ -1733,7 +1790,7 @@ private fun LogsScreen(
                 label = { Text("结果") },
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = { scope.launch { reload() } }) { Text("查询") }
+            LoadingButton(text = "查询", onClick = { reload() })
         }
         Spacer(modifier = Modifier.height(12.dp))
         if (busy) {
@@ -1765,9 +1822,9 @@ private fun LogsScreen(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { if (page > 1) page-- }, enabled = page > 1) { Text("上一页") }
+            LoadingOutlinedButton(text = "上一页", onClick = { if (page > 1) page-- }, enabled = page > 1)
             Text("第 $page / ${if (totalPages == 0) 1 else totalPages} 页")
-            OutlinedButton(onClick = { if (page < totalPages) page++ }, enabled = page < totalPages) { Text("下一页") }
+            LoadingOutlinedButton(text = "下一页", onClick = { if (page < totalPages) page++ }, enabled = page < totalPages)
         }
     }
 }

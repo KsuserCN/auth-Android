@@ -36,7 +36,24 @@ class CsrfInterceptor(
             return chain.proceed(request)
         }
 
-        val csrfToken = cookieStore.findCookieValue(request.url, "XSRF-TOKEN")
+        var csrfToken = cookieStore.findCookieValue(request.url, "XSRF-TOKEN")
+        if (csrfToken.isNullOrBlank()) {
+            val bootstrapRequest = request.newBuilder()
+                .get()
+                .url(
+                    request.url.newBuilder()
+                        .encodedPath("/auth/csrf-token")
+                        .query(null)
+                        .build(),
+                )
+                .removeHeader("X-XSRF-TOKEN")
+                .build()
+            runCatching {
+                chain.proceed(bootstrapRequest).use { /* CSRF cookie will be persisted by CookieJar */ }
+            }
+            csrfToken = cookieStore.findCookieValue(request.url, "XSRF-TOKEN")
+        }
+
         val enriched = if (csrfToken.isNullOrBlank() || request.header("X-XSRF-TOKEN") != null) {
             request
         } else {
