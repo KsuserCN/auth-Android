@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
@@ -45,6 +46,7 @@ import androidx.navigation.navArgument
 import cn.ksuser.auth.android.data.AppContainer
 
 private const val PROFILE_EDIT_ROUTE = "profile/edit/{fieldKey}"
+private const val ABOUT_ROUTE = "profile/about"
 private fun profileEditRoute(fieldKey: String): String = "profile/edit/$fieldKey"
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,11 +78,13 @@ internal fun MainShell(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
+            val route = currentDestination?.route.orEmpty()
+            val canNavigateBack = route.startsWith("profile/edit") || route == ABOUT_ROUTE
             TopAppBar(
                 title = {
-                    val route = currentDestination?.route.orEmpty()
                     val title = when {
                         route.startsWith("profile/edit") -> "编辑资料"
+                        route == ABOUT_ROUTE -> "关于"
                         else -> destinations.firstOrNull { it.route == route }?.label ?: "Ksuser"
                     }
                     Text(
@@ -94,6 +98,13 @@ internal fun MainShell(
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     actionIconContentColor = MaterialTheme.colorScheme.primary,
                 ),
+                navigationIcon = {
+                    if (canNavigateBack) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
                 actions = {
                     IconButton(
                         onClick = {
@@ -168,6 +179,7 @@ internal fun MainShell(
                 ProfileScreen(
                     currentUser = state.currentUser,
                     onNavigateToEdit = { fieldKey -> navController.navigate(profileEditRoute(fieldKey)) },
+                    onNavigateToAbout = { navController.navigate(ABOUT_ROUTE) },
                 )
             }
             composable(
@@ -202,6 +214,9 @@ internal fun MainShell(
             }
             composable(MainDestination.LOGS.route) {
                 LogsScreen(container = container)
+            }
+            composable(ABOUT_ROUTE) {
+                AboutScreen()
             }
         }
     }

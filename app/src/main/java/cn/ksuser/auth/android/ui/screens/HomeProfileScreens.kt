@@ -1,4 +1,7 @@
 package cn.ksuser.auth.android.ui
+
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,12 +11,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -113,6 +122,7 @@ internal fun OverviewCard(
 internal fun ProfileScreen(
     currentUser: UserProfile?,
     onNavigateToEdit: (String) -> Unit,
+    onNavigateToAbout: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -147,6 +157,74 @@ internal fun ProfileScreen(
             subtitle = currentUser?.email ?: "暂无邮箱",
             body = "UUID: ${currentUser?.uuid.orEmpty()}",
         )
+        ProfileInfoCard(
+            title = "关于应用",
+            value = "查看软件名称、版本、备案号与协议文档",
+            onClick = onNavigateToAbout,
+        )
+    }
+}
+
+@Composable
+internal fun AboutScreen() {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(AppPagePadding),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+    ) {
+        SectionCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(AppRadius.R16))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Ksuser Auth Android", style = MaterialTheme.typography.titleLarge)
+                    Text("版本 1.0.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        SectionCard(modifier = Modifier.fillMaxWidth()) {
+            AboutInfoRow(title = "软件名称", value = "Ksuser Auth Android")
+            AboutInfoRow(title = "版本号", value = "1.0.0")
+            AboutInfoRow(title = "备案号", value = "沪ICP备2025144703号-2")
+        }
+        SectionCard(modifier = Modifier.fillMaxWidth()) {
+            AboutLinkRow(
+                title = "服务条款",
+                url = "https://www.ksuser.cn/agreement/user.html",
+                onClick = {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.ksuser.cn/agreement/user.html")),
+                    )
+                },
+            )
+            AboutLinkRow(
+                title = "隐私协议",
+                url = "https://www.ksuser.cn/agreement/privacy.html",
+                onClick = {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.ksuser.cn/agreement/privacy.html")),
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -342,5 +420,43 @@ private fun ProfileInfoCard(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+    }
+}
+
+@Composable
+private fun AboutInfoRow(
+    title: String,
+    value: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun AboutLinkRow(
+    title: String,
+    url: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(AppRadius.R12))
+            .clickable(onClick = onClick)
+            .padding(vertical = AppSpacing.S8),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(url, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(modifier = Modifier.width(AppSpacing.S8))
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
