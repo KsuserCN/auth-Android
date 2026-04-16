@@ -28,6 +28,7 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = GoldSurfaceVariantDark,
     onSurfaceVariant = GoldOnSurfaceVariantDark,
     outline = GoldOutlineDark,
+    outlineVariant = GoldOutlineVariantDark,
     error = GoldErrorDark,
 )
 
@@ -49,13 +50,13 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = GoldSurfaceVariantLight,
     onSurfaceVariant = GoldOnSurfaceVariantLight,
     outline = GoldOutlineLight,
+    outlineVariant = GoldOutlineVariantLight,
     error = GoldErrorLight,
 )
 
 @Composable
 fun KsuserAuthAndroidTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -72,6 +73,7 @@ fun KsuserAuthAndroidTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
+        shapes = AppShapes,
         content = content
     )
 }
