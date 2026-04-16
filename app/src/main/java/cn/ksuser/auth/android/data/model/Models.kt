@@ -221,6 +221,10 @@ data class SendCodeRequest(
     val type: String,
 )
 
+data class QrApproveRequest(
+    val approveCode: String,
+)
+
 data class RegisterRequest(
     val username: String,
     val email: String,

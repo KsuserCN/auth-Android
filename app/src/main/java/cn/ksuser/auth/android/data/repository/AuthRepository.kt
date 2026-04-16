@@ -12,6 +12,7 @@ import cn.ksuser.auth.android.data.model.LoginWithCodeRequest
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationPayload
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationVerifyRequest
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
+import cn.ksuser.auth.android.data.model.QrApproveRequest
 import cn.ksuser.auth.android.data.model.PasswordRequirement
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
@@ -46,6 +47,11 @@ class AuthRepository(
 
     suspend fun sendRegisterCode(email: String) {
         val envelope = executeEnvelope(gson) { api.sendCode(SendCodeRequest(email = email, type = "register")) }
+        requireCode(envelope, 200)
+    }
+
+    suspend fun approveQrChallenge(approveCode: String) {
+        val envelope = executeEnvelope(gson) { api.approveQrChallenge(QrApproveRequest(approveCode.trim())) }
         requireCode(envelope, 200)
     }
 

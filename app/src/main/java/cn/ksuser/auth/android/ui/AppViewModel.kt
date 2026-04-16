@@ -1,6 +1,7 @@
 package cn.ksuser.auth.android.ui
 
 import android.app.Activity
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -242,6 +243,30 @@ class AppViewModel(
         }
     }
 
+    fun approveQrChallenge(rawContent: String) {
+        val approveCode = extractApproveCode(rawContent)
+        if (approveCode.isNullOrBlank()) {
+            _uiState.update { it.copy(error = "未识别到有效二维码，请重试") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, error = null, message = null) }
+            runCatching { container.authRepository.approveQrChallenge(approveCode) }
+                .onSuccess {
+                    _uiState.update { it.copy(isBusy = false, message = "扫码授权成功") }
+                }
+                .onFailure { throwable ->
+                    val readable = if (throwable is ApiException && throwable.statusCode == 401) {
+                        "请先在手机端登录"
+                    } else {
+                        throwable.toReadableMessage()
+                    }
+                    _uiState.update { it.copy(isBusy = false, error = readable) }
+                }
+        }
+    }
+
     private fun runAuthAction(action: suspend () -> AuthResult) {
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, error = null, message = null) }
@@ -296,6 +321,32 @@ class AppViewModel(
                 }
             }
         }
+    }
+
+    private fun extractApproveCode(content: String): String? {
+        val raw = content.trim()
+        if (raw.isBlank()) return null
+
+        val prefix = "KSUSER-AUTH-QR:"
+        if (raw.startsWith(prefix, ignoreCase = true)) {
+            return raw.substring(prefix.length).trim().takeIf { it.isNotBlank() }
+        }
+
+        val markerIndex = raw.indexOf(prefix, ignoreCase = true)
+        if (markerIndex >= 0) {
+            return raw.substring(markerIndex + prefix.length)
+                .substringBefore('&')
+                .substringBefore('#')
+                .trim()
+                .takeIf { it.isNotBlank() }
+        }
+
+        return runCatching {
+            val uri = Uri.parse(raw)
+            (uri.getQueryParameter("approveCode") ?: uri.getQueryParameter("code"))
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private fun runBusyAction(

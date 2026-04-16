@@ -18,6 +18,7 @@ import cn.ksuser.auth.android.data.model.PasskeyRenameRequest
 import cn.ksuser.auth.android.data.model.PaginatedSensitiveLogs
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
 import cn.ksuser.auth.android.data.model.PasswordRequirement
+import cn.ksuser.auth.android.data.model.QrApproveRequest
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
 import cn.ksuser.auth.android.data.model.SendCodeRequest
@@ -104,6 +105,11 @@ interface KsuserApiService {
 
     @POST("/auth/logout")
     suspend fun logout(): Response<ApiEnvelope<Unit>>
+
+    @POST("/auth/qr/approve")
+    suspend fun approveQrChallenge(
+        @Body request: QrApproveRequest,
+    ): Response<ApiEnvelope<Unit>>
 
     @POST("/auth/logout/all")
     suspend fun logoutAll(): Response<ApiEnvelope<Unit>>

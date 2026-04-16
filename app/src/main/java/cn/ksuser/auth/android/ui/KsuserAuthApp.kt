@@ -1,7 +1,9 @@
 package cn.ksuser.auth.android.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -78,6 +80,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -92,10 +95,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -103,6 +111,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import coil.compose.AsyncImage
 import cn.ksuser.auth.android.KsuserAuthApplication
 import cn.ksuser.auth.android.core.app.AppIdentityProvider
@@ -119,7 +132,13 @@ import cn.ksuser.auth.android.ui.theme.GoldGradientBottomDark
 import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
 import cn.ksuser.auth.android.ui.theme.GoldGradientTopDark
 import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 private enum class MainDestination(
     val route: String,
@@ -528,6 +547,17 @@ private fun MainShell(
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStack?.destination
     val destinations = MainDestination.entries
+    val context = LocalContext.current
+    var showQrScanner by rememberSaveable { mutableStateOf(false) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            showQrScanner = true
+        } else {
+            onMessage("相机权限被拒绝，无法扫码")
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -548,6 +578,21 @@ private fun MainShell(
                     actionIconContentColor = MaterialTheme.colorScheme.primary,
                 ),
                 actions = {
+                    IconButton(
+                        onClick = {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.CAMERA,
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (granted) {
+                                showQrScanner = true
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
+                    ) {
+                        Icon(Icons.Outlined.Badge, contentDescription = "扫码授权")
+                    }
                     IconButton(onClick = { viewModel.refreshCurrentUser() }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "刷新用户信息")
                     }
@@ -630,6 +675,141 @@ private fun MainShell(
             }
             composable(MainDestination.LOGS.route) {
                 LogsScreen(container = container)
+            }
+        }
+    }
+
+    if (showQrScanner) {
+        QrScannerDialog(
+            onDismiss = { showQrScanner = false },
+            onDetected = { rawContent ->
+                showQrScanner = false
+                viewModel.approveQrChallenge(rawContent)
+            },
+        )
+    }
+}
+
+@Composable
+private fun QrScannerDialog(
+    onDismiss: () -> Unit,
+    onDetected: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    val scanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build(),
+        )
+    }
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val consumed = remember { AtomicBoolean(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { cameraProviderFuture.get().unbindAll() }
+            runCatching { scanner.close() }
+            analysisExecutor.shutdown()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.9f)),
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx).apply {
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                    }
+
+                    val preview = Preview.Builder().build().also {
+                        it.surfaceProvider = previewView.surfaceProvider
+                    }
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                    imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                        if (consumed.get()) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+
+                        val mediaImage = imageProxy.image
+                        if (mediaImage == null) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+
+                        val inputImage = InputImage.fromMediaImage(
+                            mediaImage,
+                            imageProxy.imageInfo.rotationDegrees,
+                        )
+                        scanner.process(inputImage)
+                            .addOnSuccessListener { barcodes ->
+                                val rawValue = barcodes
+                                    .firstOrNull { !it.rawValue.isNullOrBlank() }
+                                    ?.rawValue
+                                    ?.trim()
+                                if (!rawValue.isNullOrBlank() && consumed.compareAndSet(false, true)) {
+                                    previewView.post { onDetected(rawValue) }
+                                }
+                            }
+                            .addOnCompleteListener { imageProxy.close() }
+                    }
+
+                    runCatching {
+                        val cameraProvider = cameraProviderFuture.get()
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            imageAnalysis,
+                        )
+                    }
+
+                    previewView
+                },
+            )
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 32.dp, start = 16.dp, end = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "扫描网页二维码",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "请将二维码置于取景框内",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp),
+            ) {
+                Text("关闭")
             }
         }
     }
