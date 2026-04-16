@@ -19,12 +19,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,16 +44,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import cn.ksuser.auth.android.core.app.AppIdentityProvider
-import cn.ksuser.auth.android.core.env.EnvironmentProvider
 import cn.ksuser.auth.android.data.AppContainer
 import cn.ksuser.auth.android.data.model.UserProfile
 import cn.ksuser.auth.android.ui.components.AppOutlinedField
 import cn.ksuser.auth.android.ui.components.AppPagePadding
 import cn.ksuser.auth.android.ui.components.AppRadius
 import cn.ksuser.auth.android.ui.components.AppSpacing
+import cn.ksuser.auth.android.ui.components.BrandHeroCard
 import cn.ksuser.auth.android.ui.components.GradientPrimaryButton
 import cn.ksuser.auth.android.ui.components.LoadingButton
 import cn.ksuser.auth.android.ui.components.SectionCard
@@ -56,10 +63,32 @@ import kotlinx.coroutines.launch
 internal fun HomeScreen(
     user: UserProfile?,
     onRefresh: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenSecurity: () -> Unit,
+    onOpenSessions: () -> Unit,
 ) {
-    val env = EnvironmentProvider.current
-    val context = LocalContext.current
-    val appIdentity = remember(context) { AppIdentityProvider.current(context) }
+    val displayRealName = user?.realName.takeMeaningfulProfileText()
+    val displayUsername = user?.username.takeMeaningfulProfileText()
+    val displayRegion = user?.region.takeMeaningfulProfileText()
+    val displayBio = user?.bio.takeMeaningfulProfileText()
+    val hasAvatar = !user?.avatarUrl.isNullOrBlank()
+    val completionItems = listOf(
+        displayUsername != null,
+        displayRealName != null,
+        displayRegion != null,
+        displayBio != null,
+        hasAvatar,
+    )
+    val completedCount = completionItems.count { it }
+    val completionPercent = if (completionItems.isEmpty()) 0 else completedCount * 100 / completionItems.size
+    val securitySummary = when {
+        user?.settings?.mfaEnabled == true && user.settings.detectUnusualLogin -> "账号保护较完整"
+        user?.settings?.mfaEnabled == true -> "双重验证已开启"
+        else -> "建议继续完善安全设置"
+    }
+    val greetingName = displayUsername
+        ?: displayRealName
+        ?: "你好"
 
     Column(
         modifier = Modifier
@@ -68,34 +97,305 @@ internal fun HomeScreen(
             .padding(AppPagePadding),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.S12),
     ) {
-        OverviewCard(
-            title = user?.username ?: "未命名用户",
-            subtitle = user?.email ?: "暂无邮箱",
-            body = buildString {
-                appendLine("当前接口前缀: ${env.apiBaseUrl}")
-                appendLine("Passkey RP: ${env.passkeyRpId}")
-                appendLine("环境: ${env.appEnv}")
-                appendLine("UA: ${AppIdentityProvider.userAgent()}")
-                appendLine("包名: ${appIdentity.packageName}")
-                appendLine("版本: ${appIdentity.versionName} (${appIdentity.versionCode})")
-                append("签名 SHA-256: ${appIdentity.signingSha256.joinToString(" / ").ifBlank { "未知" }}")
-            },
-            actionLabel = "刷新账号信息",
-            onAction = onRefresh,
+        AccountHeroCard(
+            user = user,
+            greetingName = greetingName,
+            securitySummary = securitySummary,
+            onRefresh = onRefresh,
+            onOpenProfile = onOpenProfile,
         )
-        OverviewCard(
-            title = "安全偏好",
-            subtitle = "来自当前账号设置",
-            body = buildString {
-                appendLine("MFA: ${user?.settings?.mfaEnabled}")
-                appendLine("首选 MFA: ${user?.settings?.preferredMfaMethod ?: "totp"}")
-                appendLine("首选敏感验证: ${user?.settings?.preferredSensitiveMethod ?: "password"}")
-            },
+        SecurityOverviewCard(
+            user = user,
+            onOpenSecurity = onOpenSecurity,
         )
-        OverviewCard(
-            title = "Passkey 联调提示",
-            subtitle = "API 前缀与 RP 域分离",
-            body = "如果把 API 指向 localhost，但服务端 WebAuthn 仍返回 localhost/非生产 RP，Android 原生 Passkey 可能无法按生产方式直接工作。",
+        QuickActionsCard(
+            onOpenProfile = onOpenProfile,
+            onOpenSecurity = onOpenSecurity,
+            onOpenSessions = onOpenSessions,
+        )
+        ProfileCompletionCard(
+            user = user,
+            completionPercent = completionPercent,
+            completedCount = completedCount,
+            totalCount = completionItems.size,
+            onOpenProfile = onOpenProfile,
+        )
+    }
+}
+
+@Composable
+private fun AccountHeroCard(
+    user: UserProfile?,
+    greetingName: String,
+    securitySummary: String,
+    onRefresh: () -> Unit,
+    onOpenProfile: () -> Unit,
+) {
+    BrandHeroCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S12)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AvatarBadge(
+                    avatarUrl = user?.avatarUrl,
+                    label = greetingName.take(1),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("欢迎回来，$greetingName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        user?.email.orEmpty().ifBlank { "当前账号未绑定邮箱" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        securitySummary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8),
+            ) {
+                Button(
+                    onClick = onOpenProfile,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(AppRadius.R12),
+                ) {
+                    Text("查看资料")
+                }
+                OutlinedButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(AppRadius.R12),
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(AppSpacing.S8))
+                    Text("刷新状态")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecurityOverviewCard(
+    user: UserProfile?,
+    onOpenSecurity: () -> Unit,
+) {
+    val settings = user?.settings
+    val mfaStatus = if (settings?.mfaEnabled == true) "已开启" else "未开启"
+    val unusualLoginStatus = if (settings?.detectUnusualLogin == true) "已开启" else "未开启"
+    val notifyStatus = if (settings?.notifySensitiveActionEmail == true) "已开启" else "未开启"
+
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Text("账号安全", style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (settings?.mfaEnabled == true) {
+                "你的账号已启用额外验证，安全性更高。"
+            } else {
+                "建议开启双重验证，避免密码泄露后被直接登录。"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+            StatusChip(title = "双重验证", value = mfaStatus, modifier = Modifier.weight(1f))
+            StatusChip(title = "异常登录提醒", value = unusualLoginStatus, modifier = Modifier.weight(1f))
+        }
+        StatusChip(title = "敏感操作邮件提醒", value = notifyStatus, modifier = Modifier.fillMaxWidth())
+        OutlinedButton(
+            onClick = onOpenSecurity,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(AppRadius.R12),
+        ) {
+            Icon(Icons.Outlined.AdminPanelSettings, contentDescription = null)
+            Spacer(modifier = Modifier.width(AppSpacing.S8))
+            Text("前往安全设置")
+        }
+    }
+}
+
+@Composable
+private fun QuickActionsCard(
+    onOpenProfile: () -> Unit,
+    onOpenSecurity: () -> Unit,
+    onOpenSessions: () -> Unit,
+) {
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Text("常用功能", style = MaterialTheme.typography.titleLarge)
+        Text("这些入口用于处理资料完善、账号保护和设备管理。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        QuickActionRow(
+            icon = Icons.Outlined.Person,
+            title = "编辑资料",
+            subtitle = "修改头像、昵称、地区和简介",
+            onClick = onOpenProfile,
+        )
+        QuickActionRow(
+            icon = Icons.Outlined.AdminPanelSettings,
+            title = "安全设置",
+            subtitle = "管理双重验证和敏感操作保护",
+            onClick = onOpenSecurity,
+        )
+        QuickActionRow(
+            icon = Icons.Outlined.Devices,
+            title = "设备会话",
+            subtitle = "查看当前登录设备并处理异常登录",
+            onClick = onOpenSessions,
+        )
+    }
+}
+
+@Composable
+private fun ProfileCompletionCard(
+    user: UserProfile?,
+    completionPercent: Int,
+    completedCount: Int,
+    totalCount: Int,
+    onOpenProfile: () -> Unit,
+) {
+    val displayUsername = user?.username.takeMeaningfulProfileText()
+    val displayRealName = user?.realName.takeMeaningfulProfileText()
+    val displayRegion = user?.region.takeMeaningfulProfileText()
+    val displayBio = user?.bio.takeMeaningfulProfileText()
+    val hasAvatar = !user?.avatarUrl.isNullOrBlank()
+
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Text("资料完善度", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "已完成 $completedCount/$totalCount 项，当前完善度 $completionPercent%。资料越完整，账号展示越清晰。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        CompletionItem(label = "用户名", done = displayUsername != null)
+        CompletionItem(label = "头像", done = hasAvatar)
+        CompletionItem(label = "真实姓名", done = displayRealName != null)
+        CompletionItem(label = "地区", done = displayRegion != null)
+        CompletionItem(label = "个人简介", done = displayBio != null)
+        OutlinedButton(
+            onClick = onOpenProfile,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(AppRadius.R12),
+        ) {
+            Text("继续完善资料")
+        }
+    }
+}
+
+private fun String?.takeMeaningfulProfileText(): String? {
+    val normalized = this?.trim().orEmpty()
+    if (normalized.isBlank()) return null
+    if (normalized in setOf("无", "未设置", "暂无", "null", "NULL", "-")) return null
+    return normalized
+}
+
+@Composable
+private fun AvatarBadge(
+    avatarUrl: String?,
+    label: String,
+) {
+    Box(
+        modifier = Modifier
+            .size(60.dp)
+            .clip(RoundedCornerShape(AppRadius.R20))
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "头像",
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = label.ifBlank { "我" },
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(AppRadius.R12),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.S12),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
+private fun QuickActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppRadius.R12))
+            .clickable(onClick = onClick)
+            .padding(vertical = AppSpacing.S8),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(AppRadius.R12))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("进入", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun CompletionItem(
+    label: String,
+    done: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            if (done) "已完成" else "待完善",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -173,6 +173,9 @@ internal fun MainShell(
                 HomeScreen(
                     user = state.currentUser,
                     onRefresh = { viewModel.refreshCurrentUser() },
+                    onOpenProfile = { navController.navigate(MainDestination.PROFILE.route) },
+                    onOpenSecurity = { navController.navigate(MainDestination.SECURITY.route) },
+                    onOpenSessions = { navController.navigate(MainDestination.SESSIONS.route) },
                 )
             }
             composable(MainDestination.PROFILE.route) {
