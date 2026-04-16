@@ -2,7 +2,10 @@ package cn.ksuser.auth.android.ui
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,14 +13,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,6 +76,11 @@ import cn.ksuser.auth.android.ui.components.LoadingButton
 import cn.ksuser.auth.android.ui.components.LoadingOutlinedButton
 import cn.ksuser.auth.android.ui.components.LoadingTextButton
 import cn.ksuser.auth.android.ui.components.SectionCard
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 @Composable
@@ -78,10 +109,12 @@ internal fun SecurityScreen(
     var newPasskeyName by rememberSaveable { mutableStateOf("Ksuser Android") }
     var renameTarget by remember { mutableStateOf<PasskeyListItem?>(null) }
     var renameDraft by rememberSaveable { mutableStateOf("") }
+    var detailTarget by remember { mutableStateOf<PasskeyListItem?>(null) }
     var showChangeEmailDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<PendingSecurityAction?>(null) }
 
     suspend fun reloadAll() {
         busy = true
@@ -96,6 +129,98 @@ internal fun SecurityScreen(
     LaunchedEffect(user?.uuid) {
         settings = user?.settings
         reloadAll()
+    }
+
+    fun requireSensitiveVerification(action: PendingSecurityAction) {
+        if (sensitiveStatus?.verified == true) {
+            pendingAction = action
+        } else {
+            pendingAction = action
+            showSensitiveDialog = true
+        }
+    }
+
+    LaunchedEffect(pendingAction, sensitiveStatus?.verified) {
+        val action = pendingAction ?: return@LaunchedEffect
+        if (sensitiveStatus?.verified != true) return@LaunchedEffect
+        when (action) {
+            PendingSecurityAction.AddPasskey -> {
+                showAddPasskeyDialog = true
+                pendingAction = null
+            }
+            PendingSecurityAction.ChangeEmail -> {
+                showChangeEmailDialog = true
+                pendingAction = null
+            }
+            PendingSecurityAction.ChangePassword -> {
+                showChangePasswordDialog = true
+                pendingAction = null
+            }
+            PendingSecurityAction.DeleteAccount -> {
+                showDeleteDialog = true
+                pendingAction = null
+            }
+            is PendingSecurityAction.RenamePasskey -> {
+                renameTarget = action.passkey
+                renameDraft = action.passkey.name
+                pendingAction = null
+            }
+            is PendingSecurityAction.DeletePasskey -> {
+                scope.launch {
+                    val deleted = runCatching { container.securityRepository.deletePasskey(action.passkey.id) }
+                        .onFailure { onMessage(it.message ?: "删除失败") }
+                        .isSuccess
+                    if (deleted) {
+                        reloadAll()
+                        onMessage("Passkey 已删除")
+                    }
+                    pendingAction = null
+                }
+            }
+            PendingSecurityAction.SetupTotp -> {
+                scope.launch {
+                    runCatching { container.securityRepository.getTotpRegistrationOptions() }
+                        .onSuccess { pendingTotpSetup = it }
+                        .onFailure { onMessage(it.message ?: "生成 TOTP 选项失败") }
+                    pendingAction = null
+                }
+            }
+            PendingSecurityAction.DisableTotp -> {
+                scope.launch {
+                    val disabled = runCatching { container.securityRepository.disableTotp() }
+                        .onFailure { onMessage(it.message ?: "禁用失败") }
+                        .isSuccess
+                    if (disabled) {
+                        reloadAll()
+                        onMessage("TOTP 已禁用")
+                    }
+                    pendingAction = null
+                }
+            }
+            PendingSecurityAction.ViewRecoveryCodes -> {
+                scope.launch {
+                    recoveryCodes = runCatching { container.securityRepository.getRecoveryCodes() }
+                        .getOrElse {
+                            onMessage(it.message ?: "获取恢复码失败")
+                            emptyList()
+                        }
+                    pendingAction = null
+                }
+            }
+            PendingSecurityAction.RegenerateRecoveryCodes -> {
+                scope.launch {
+                    val newCodes = runCatching { container.securityRepository.regenerateRecoveryCodes() }
+                        .onFailure { onMessage(it.message ?: "重生恢复码失败") }
+                        .getOrNull()
+                    if (newCodes != null) {
+                        recoveryCodes = newCodes
+                        reloadAll()
+                        onMessage("恢复码已重新生成")
+                    }
+                    pendingAction = null
+                }
+            }
+        }
     }
 
     Column(
@@ -161,7 +286,7 @@ internal fun SecurityScreen(
                         .onFailure { onMessage(it.message ?: "更新失败") }
                 }
             }
-            PreferenceChips(
+            PreferenceDropdown(
                 title = "首选 MFA",
                 options = listOf("totp", "passkey"),
                 selected = settings?.preferredMfaMethod ?: "totp",
@@ -176,7 +301,7 @@ internal fun SecurityScreen(
                         .onFailure { onMessage(it.message ?: "更新失败") }
                 }
             }
-            PreferenceChips(
+            PreferenceDropdown(
                 title = "首选敏感验证",
                 options = listOf("password", "email-code", "passkey", "totp"),
                 selected = settings?.preferredSensitiveMethod ?: "password",
@@ -194,128 +319,114 @@ internal fun SecurityScreen(
         }
 
         SectionCard {
-            Text("敏感操作验证", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (sensitiveStatus?.verified == true) {
-                    "已验证，剩余 ${sensitiveStatus?.remainingSeconds ?: 0} 秒"
+            SectionHeader(
+                title = "TOTP 验证器",
+                subtitle = if (totpStatus?.enabled == true) {
+                    "已启用，剩余恢复码 ${totpStatus?.recoveryCodesCount ?: 0} 个"
                 } else {
-                    "未验证，涉及添加 Passkey、修改邮箱/密码、删除账户时需要先验证"
+                    "尚未启用，可作为常用多因素验证方式"
                 },
+                actionText = if (busy) null else "刷新",
+                onAction = { scope.launch { reloadAll() } },
             )
-            val methods = sensitiveStatus?.methods.orEmpty()
+            SecurityActionCard(
+                icon = Icons.Outlined.Security,
+                title = if (totpStatus?.enabled == true) "TOTP 验证器" else "启用 TOTP",
+                subtitle = if (totpStatus?.enabled == true) {
+                    "使用验证器 App 与恢复码保护账号"
+                } else {
+                    "生成密钥与二维码，在验证器 App 中绑定后启用"
+                },
+                statusIcon = if (totpStatus?.enabled == true) Icons.Outlined.CheckCircle else null,
+                statusAccent = totpStatus?.enabled == true,
+                onClick = {
+                    if (totpStatus?.enabled != true) {
+                        requireSensitiveVerification(PendingSecurityAction.SetupTotp)
+                    }
+                },
+                actionLabel = if (totpStatus?.enabled == true) "已启用" else "启用",
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                methods.forEach { method ->
-                    AssistChip(onClick = {}, label = { Text(method) })
+                if (totpStatus?.enabled == true) {
+                    CompactSecurityButton(
+                        text = "禁用",
+                        onClick = { requireSensitiveVerification(PendingSecurityAction.DisableTotp) },
+                        destructive = true,
+                    )
                 }
-            }
-            Button(onClick = { showSensitiveDialog = true }, enabled = !busy) {
-                Text(if (sensitiveStatus?.verified == true) "重新验证" else "开始验证")
-            }
-        }
-
-        SectionCard {
-            Text("TOTP", style = MaterialTheme.typography.titleMedium)
-            Text("已启用: ${totpStatus?.enabled == true}，剩余恢复码: ${totpStatus?.recoveryCodesCount ?: 0}")
-            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                LoadingButton(text = "生成 TOTP 注册选项", onClick = {
-                    runCatching { container.securityRepository.getTotpRegistrationOptions() }
-                        .onSuccess { pendingTotpSetup = it }
-                        .onFailure { onMessage(it.message ?: "生成 TOTP 选项失败") }
-                })
-                LoadingOutlinedButton(text = "禁用", onClick = {
-                    val disabled = runCatching { container.securityRepository.disableTotp() }
-                        .onFailure { onMessage(it.message ?: "禁用失败") }
-                        .isSuccess
-                    if (disabled) {
-                        reloadAll()
-                        onMessage("TOTP 已禁用")
-                    }
-                })
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                LoadingOutlinedButton(text = "查看恢复码", onClick = {
-                    recoveryCodes = runCatching { container.securityRepository.getRecoveryCodes() }
-                        .getOrElse {
-                            onMessage(it.message ?: "获取恢复码失败")
-                            emptyList()
-                        }
-                })
-                LoadingOutlinedButton(text = "重生恢复码", onClick = {
-                    val newCodes = runCatching { container.securityRepository.regenerateRecoveryCodes() }
-                        .onFailure { onMessage(it.message ?: "重生恢复码失败") }
-                        .getOrNull()
-                    if (newCodes != null) {
-                        recoveryCodes = newCodes
-                        reloadAll()
-                        onMessage("恢复码已重新生成")
-                    }
-                })
+                CompactSecurityButton(
+                    text = "查看恢复码",
+                    onClick = { requireSensitiveVerification(PendingSecurityAction.ViewRecoveryCodes) },
+                )
+                CompactSecurityButton(
+                    text = "重新生成",
+                    onClick = { requireSensitiveVerification(PendingSecurityAction.RegenerateRecoveryCodes) },
+                )
             }
             if (recoveryCodes.isNotEmpty()) {
-                Text(recoveryCodes.joinToString("  "), style = MaterialTheme.typography.bodySmall)
+                SectionCard(modifier = Modifier.fillMaxWidth()) {
+                    Text("恢复码", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        recoveryCodes.joinToString("  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
         SectionCard {
-            Text("Passkey", style = MaterialTheme.typography.titleMedium)
-            Text(passkeyAvailabilityMessage)
-            Button(
-                onClick = { showAddPasskeyDialog = true },
-                enabled = passkeyAvailability == PasskeyAvailability.Available &&
-                    sensitiveStatus?.verified == true &&
-                    activity != null,
-            ) {
-                Text("新增 Passkey")
-            }
+            SectionHeader(
+                title = "Passkey",
+                subtitle = passkeyAvailabilityMessage,
+                actionText = if (passkeyAvailability == PasskeyAvailability.Available && activity != null) "新增" else null,
+                onAction = { requireSensitiveVerification(PendingSecurityAction.AddPasskey) },
+            )
             if (passkeyAvailability != PasskeyAvailability.Available) {
                 Text("当前环境不满足原生 Passkey 要求，已阻止继续创建。", color = MaterialTheme.colorScheme.error)
             }
-            if (sensitiveStatus?.verified != true) {
-                Text("添加 Passkey 前请先完成敏感验证", color = MaterialTheme.colorScheme.error)
-            }
             passkeys.forEach { passkey ->
-                SectionCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(passkey.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "创建于 ${passkey.createdAt}\n最后使用 ${passkey.lastUsedAt ?: "暂无"}\ntransports=${passkey.transports}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                        OutlinedButton(onClick = {
-                            renameTarget = passkey
-                            renameDraft = passkey.name
-                        }) { Text("重命名") }
-                        LoadingOutlinedButton(text = "删除", onClick = {
-                            val deleted = runCatching { container.securityRepository.deletePasskey(passkey.id) }
-                                .onFailure { onMessage(it.message ?: "删除失败") }
-                                .isSuccess
-                            if (deleted) {
-                                reloadAll()
-                                onMessage("Passkey 已删除")
-                            }
-                        })
-                    }
-                }
+                PasskeyCard(
+                    passkey = passkey,
+                    onDetails = { detailTarget = passkey },
+                    onRename = { requireSensitiveVerification(PendingSecurityAction.RenamePasskey(passkey)) },
+                    onDelete = { requireSensitiveVerification(PendingSecurityAction.DeletePasskey(passkey)) },
+                )
+            }
+            if (passkeys.isEmpty()) {
+                Text("还没有添加 Passkey，可用于更快捷的无密码登录。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
         SectionCard {
-            Text("敏感操作", style = MaterialTheme.typography.titleMedium)
-            Text("修改邮箱、修改密码、删除账号要求先完成上方敏感验证")
-            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                Button(onClick = { showChangeEmailDialog = true }, enabled = sensitiveStatus?.verified == true) {
-                    Text("修改邮箱")
-                }
-                Button(onClick = { showChangePasswordDialog = true }, enabled = sensitiveStatus?.verified == true) {
-                    Text("修改密码")
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                OutlinedButton(onClick = { showDeleteDialog = true }, enabled = sensitiveStatus?.verified == true) {
-                    Text("删除账号")
-                }
-                LoadingOutlinedButton(text = "退出全部设备", onClick = { onLogoutAll() })
-            }
+            SectionHeader(
+                title = "敏感操作",
+                subtitle = if (sensitiveStatus?.verified == true) {
+                    "当前已通过验证，剩余 ${sensitiveStatus?.remainingSeconds ?: 0} 秒"
+                } else {
+                    "在执行修改邮箱、修改密码、删除账号等操作前，会自动要求验证身份"
+                },
+            )
+            SecurityActionCard(
+                icon = Icons.Outlined.Badge,
+                title = "修改邮箱",
+                subtitle = user?.email ?: "当前未绑定邮箱",
+                onClick = { requireSensitiveVerification(PendingSecurityAction.ChangeEmail) },
+            )
+            SecurityActionCard(
+                icon = Icons.Outlined.Password,
+                title = "修改密码",
+                subtitle = "更新当前账号密码",
+                onClick = { requireSensitiveVerification(PendingSecurityAction.ChangePassword) },
+            )
+            SecurityActionCard(
+                icon = Icons.Outlined.Shield,
+                title = "删除账号",
+                subtitle = "此操作不可撤销，请谨慎处理",
+                destructive = true,
+                onClick = { requireSensitiveVerification(PendingSecurityAction.DeleteAccount) },
+            )
+            LoadingOutlinedButton(text = "退出全部设备", onClick = { onLogoutAll() })
         }
     }
 
@@ -422,6 +533,24 @@ internal fun SecurityScreen(
         )
     }
 
+    detailTarget?.let { passkey ->
+        AlertDialog(
+            onDismissRequest = { detailTarget = null },
+            title = { Text("Passkey 详情") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                    Text("名称：${passkey.name}", style = MaterialTheme.typography.bodyMedium)
+                    Text("创建于：${formatSecurityTime(passkey.createdAt)}", style = MaterialTheme.typography.bodySmall)
+                    Text("最后使用：${formatSecurityTime(passkey.lastUsedAt)}", style = MaterialTheme.typography.bodySmall)
+                    Text("连接方式：${passkey.transports.ifBlank { "未知" }}", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { detailTarget = null }) { Text("关闭") }
+            },
+        )
+    }
+
     if (showSensitiveDialog) {
         SensitiveVerificationDialog(
             container = container,
@@ -493,24 +622,261 @@ private fun SettingSwitchRow(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun PreferenceChips(
+private fun PreferenceDropdown(
     title: String,
     options: List<String>,
     selected: String,
     onSelected: (String) -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+        ) {
+            OutlinedTextField(
+                value = selected.toDisplayLabel(),
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
             options.forEach { option ->
-                FilterChip(
-                    selected = selected == option,
-                    onClick = { onSelected(option) },
-                    label = { Text(option) },
+                    DropdownMenuItem(
+                        text = { Text(option.toDisplayLabel()) },
+                        onClick = {
+                            expanded = false
+                            onSelected(option)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (actionText != null && onAction != null) {
+            CompactSecurityButton(text = actionText, onClick = onAction)
+        }
+    }
+}
+
+@Composable
+private fun SecurityActionCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    statusIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    statusAccent: Boolean = false,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+    actionLabel: String = "前往",
+) {
+    val iconBg = if (destructive) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
+    }
+    val iconTint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    SectionCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(iconBg, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8), verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, style = MaterialTheme.typography.titleSmall)
+                        if (statusIcon != null) {
+                            Icon(
+                                imageVector = statusIcon,
+                                contentDescription = null,
+                                tint = if (statusAccent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    actionLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = if (statusAccent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PasskeyCard(
+    passkey: PasskeyListItem,
+    onDetails: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    SectionCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
+                    Text(passkey.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "最近使用 ${formatSecurityTime(passkey.lastUsedAt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDetails, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Outlined.Info, contentDescription = "详情", modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+        Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+            CompactSecurityButton(text = "重命名", onClick = onRename)
+            CompactSecurityButton(text = "删除", onClick = onDelete, destructive = true)
+        }
+    }
+}
+
+@Composable
+private fun CompactSecurityButton(
+    text: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(height = 34.dp, width = androidx.compose.ui.unit.Dp.Unspecified),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        if (destructive) {
+            Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+        }
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+private sealed interface PendingSecurityAction {
+    data object AddPasskey : PendingSecurityAction
+    data object ChangeEmail : PendingSecurityAction
+    data object ChangePassword : PendingSecurityAction
+    data object DeleteAccount : PendingSecurityAction
+    data object SetupTotp : PendingSecurityAction
+    data object DisableTotp : PendingSecurityAction
+    data object ViewRecoveryCodes : PendingSecurityAction
+    data object RegenerateRecoveryCodes : PendingSecurityAction
+    data class RenamePasskey(val passkey: PasskeyListItem) : PendingSecurityAction
+    data class DeletePasskey(val passkey: PasskeyListItem) : PendingSecurityAction
+}
+
+private fun String.toDisplayLabel(): String {
+    return when (this) {
+        "totp" -> "TOTP"
+        "passkey" -> "Passkey"
+        "password" -> "密码"
+        "email-code" -> "邮箱验证码"
+        else -> this
+    }
+}
+
+private fun formatSecurityTime(value: String?): String {
+    if (value.isNullOrBlank()) return "暂无"
+    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    return runCatching {
+        OffsetDateTime.parse(value).toLocalDateTime().format(formatter)
+    }.recoverCatching {
+        LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME).format(formatter)
+    }.recoverCatching {
+        Instant.parse(value).atZone(ZoneId.systemDefault()).toLocalDateTime().format(formatter)
+    }.getOrElse {
+        value.replace('T', ' ')
     }
 }
 
@@ -544,7 +910,7 @@ private fun SensitiveVerificationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
                 Text("可用方式: ${status?.methods?.joinToString().orEmpty()}")
-                PreferenceChips(
+                PreferenceDropdown(
                     title = "验证方式",
                     options = status?.methods.orEmpty(),
                     selected = selectedMethod,

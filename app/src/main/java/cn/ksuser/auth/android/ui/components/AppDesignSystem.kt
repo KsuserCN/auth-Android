@@ -43,33 +43,33 @@ import cn.ksuser.auth.android.ui.theme.BrandButtonGradientStart
 import kotlinx.coroutines.launch
 
 object AppSpacing {
-    val S8: Dp = 8.dp
-    val S12: Dp = 12.dp
-    val S16: Dp = 16.dp
-    val S20: Dp = 20.dp
-    val S24: Dp = 24.dp
-    val S32: Dp = 32.dp
+    val S8: Dp = 6.dp
+    val S12: Dp = 10.dp
+    val S16: Dp = 12.dp
+    val S20: Dp = 16.dp
+    val S24: Dp = 20.dp
+    val S32: Dp = 24.dp
 }
 
 object AppRadius {
-    val R8: Dp = 8.dp
-    val R12: Dp = 12.dp
-    val R16: Dp = 16.dp
-    val R20: Dp = 20.dp
-    val R24: Dp = 24.dp
+    val R8: Dp = 6.dp
+    val R12: Dp = 10.dp
+    val R16: Dp = 14.dp
+    val R20: Dp = 16.dp
+    val R24: Dp = 20.dp
 }
 
-val AppPagePadding = AppSpacing.S16
+val AppPagePadding = AppSpacing.S12
 
 @Composable
 fun SectionCard(
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(AppSpacing.S16),
+    contentPadding: PaddingValues = PaddingValues(AppSpacing.S12),
     content: @Composable () -> Unit,
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(AppRadius.R20),
+        shape = RoundedCornerShape(AppRadius.R16),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
@@ -85,7 +85,7 @@ fun SectionCard(
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.S8),
         ) {
             content()
         }
@@ -99,7 +99,7 @@ fun BrandHeroCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(AppRadius.R24),
+        shape = RoundedCornerShape(AppRadius.R20),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
     ) {
@@ -113,7 +113,7 @@ fun BrandHeroCard(
                         ),
                     ),
                 )
-                .padding(AppSpacing.S24),
+                .padding(AppSpacing.S20),
         ) {
             content()
         }
@@ -134,7 +134,7 @@ fun AppOutlinedField(
         onValueChange = onValueChange,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp),
+            .heightIn(min = 48.dp),
         label = label,
         singleLine = singleLine,
         shape = RoundedCornerShape(AppRadius.R12),
@@ -161,7 +161,7 @@ fun LoadingButtonContent(
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
                 strokeWidth = 2.dp,
             )
             androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(AppSpacing.S8))
@@ -187,7 +187,7 @@ fun GradientPrimaryButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .heightIn(min = 48.dp)
+            .heightIn(min = 42.dp)
             .clip(RoundedCornerShape(AppRadius.R12)),
         shape = RoundedCornerShape(AppRadius.R12),
         contentPadding = PaddingValues(0.dp),
@@ -208,7 +208,7 @@ fun GradientPrimaryButton(
                         )
                     },
                 )
-                .padding(vertical = AppSpacing.S12),
+                .padding(vertical = AppSpacing.S8),
             contentAlignment = Alignment.Center,
         ) {
             Text(text)
@@ -238,7 +238,7 @@ fun LoadingButton(
             }
         },
         enabled = enabled && !isLoading,
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = 42.dp),
         shape = RoundedCornerShape(AppRadius.R12),
     ) {
         LoadingButtonContent(text = text, isLoading = isLoading)
@@ -267,7 +267,7 @@ fun LoadingOutlinedButton(
             }
         },
         enabled = enabled && !isLoading,
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = 42.dp),
         shape = RoundedCornerShape(AppRadius.R12),
     ) {
         LoadingButtonContent(text = text, isLoading = isLoading)
