@@ -231,6 +231,7 @@ internal fun MainShell(
                 showQrScanner = false
                 viewModel.handleScannedQr(rawContent)
             },
+            onMessage = onMessage,
         )
     }
 }

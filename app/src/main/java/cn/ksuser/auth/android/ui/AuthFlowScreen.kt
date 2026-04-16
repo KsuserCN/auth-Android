@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import cn.ksuser.auth.android.ui.theme.GoldGradientBottomDark
 import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
 import cn.ksuser.auth.android.ui.theme.GoldGradientTopDark
 import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun AuthFlowScreen(
@@ -61,6 +63,7 @@ internal fun AuthFlowScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val scope = rememberCoroutineScope()
     var showQrScanner by rememberSaveable { mutableStateOf(false) }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -330,6 +333,9 @@ internal fun AuthFlowScreen(
             onDetected = { rawContent ->
                 showQrScanner = false
                 viewModel.handleScannedQr(rawContent)
+            },
+            onMessage = { message ->
+                scope.launch { snackbarHostState.showSnackbar(message) }
             },
         )
     }
