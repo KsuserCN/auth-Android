@@ -36,11 +36,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import cn.ksuser.auth.android.data.AppContainer
+
+private const val PROFILE_EDIT_ROUTE = "profile/edit/{fieldKey}"
+private fun profileEditRoute(fieldKey: String): String = "profile/edit/$fieldKey"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,10 +78,13 @@ internal fun MainShell(
         topBar = {
             TopAppBar(
                 title = {
+                    val route = currentDestination?.route.orEmpty()
+                    val title = when {
+                        route.startsWith("profile/edit") -> "编辑资料"
+                        else -> destinations.firstOrNull { it.route == route }?.label ?: "Ksuser"
+                    }
                     Text(
-                        currentDestination?.route?.let { route ->
-                            destinations.firstOrNull { it.route == route }?.label ?: "Ksuser"
-                        } ?: "Ksuser",
+                        title,
                         style = MaterialTheme.typography.titleLarge,
                     )
                 },
@@ -158,12 +166,21 @@ internal fun MainShell(
             }
             composable(MainDestination.PROFILE.route) {
                 ProfileScreen(
+                    currentUser = state.currentUser,
+                    onNavigateToEdit = { fieldKey -> navController.navigate(profileEditRoute(fieldKey)) },
+                )
+            }
+            composable(
+                route = PROFILE_EDIT_ROUTE,
+                arguments = listOf(navArgument("fieldKey") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val fieldKey = backStackEntry.arguments?.getString("fieldKey").orEmpty()
+                ProfileEditScreen(
                     container = container,
                     currentUser = state.currentUser,
-                    onProfileUpdated = {
-                        viewModel.refreshCurrentUser()
-                        onMessage("资料已更新")
-                    },
+                    fieldKey = fieldKey,
+                    onBack = { navController.popBackStack() },
+                    onProfileUpdated = { viewModel.refreshCurrentUser() },
                     onMessage = onMessage,
                 )
             }
