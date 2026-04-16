@@ -24,6 +24,7 @@ data class AppUiState(
     val currentUser: UserProfile? = null,
     val passwordRequirement: PasswordRequirement? = null,
     val pendingMfa: AuthResult.NeedsMfa? = null,
+    val pendingTransferCode: String? = null,
     val message: String? = null,
     val error: String? = null,
 )
@@ -49,6 +50,7 @@ class AppViewModel(
                         it.copy(
                             isBootstrapping = false,
                             isAuthenticated = false,
+                            pendingTransferCode = null,
                             passwordRequirement = requirement,
                         )
                     }
@@ -59,6 +61,7 @@ class AppViewModel(
                             isBootstrapping = false,
                             isAuthenticated = true,
                             currentUser = user,
+                            pendingTransferCode = null,
                             passwordRequirement = requirement,
                         )
                     }
@@ -68,6 +71,7 @@ class AppViewModel(
                     it.copy(
                         isBootstrapping = false,
                         isAuthenticated = false,
+                        pendingTransferCode = null,
                         error = throwable.toReadableMessage(),
                     )
                 }
@@ -223,6 +227,7 @@ class AppViewModel(
                     isAuthenticated = false,
                     currentUser = null,
                     pendingMfa = null,
+                    pendingTransferCode = null,
                     message = "已退出登录",
                 )
             }
@@ -237,21 +242,55 @@ class AppViewModel(
                     isAuthenticated = false,
                     currentUser = null,
                     pendingMfa = null,
+                    pendingTransferCode = null,
                     message = "已从所有设备退出",
                 )
             }
         }
     }
 
-    fun approveQrChallenge(rawContent: String) {
+    fun handleScannedQr(rawContent: String) {
+        val transferCode = extractTransferCode(rawContent)
+        if (!transferCode.isNullOrBlank()) {
+            val state = _uiState.value
+            if (state.isAuthenticated) {
+                _uiState.update {
+                    it.copy(
+                        pendingTransferCode = transferCode,
+                        message = "检测到跨端登录二维码，请确认是否切换账号",
+                    )
+                }
+                return
+            }
+            exchangeSessionTransferAndLogin(transferCode)
+            return
+        }
+
         val approveCode = extractApproveCode(rawContent)
         if (approveCode.isNullOrBlank()) {
             _uiState.update { it.copy(error = "未识别到有效二维码，请重试") }
             return
         }
 
+        approveQrChallenge(approveCode)
+    }
+
+    fun confirmTransferLogin() {
+        val transferCode = _uiState.value.pendingTransferCode
+        if (transferCode.isNullOrBlank()) {
+            _uiState.update { it.copy(error = "二维码票据无效，请重新扫码") }
+            return
+        }
+        exchangeSessionTransferAndLogin(transferCode)
+    }
+
+    fun cancelTransferLogin() {
+        _uiState.update { it.copy(pendingTransferCode = null) }
+    }
+
+    private fun approveQrChallenge(approveCode: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isBusy = true, error = null, message = null) }
+            _uiState.update { it.copy(isBusy = true, error = null, message = null, pendingTransferCode = null) }
             runCatching { container.authRepository.approveQrChallenge(approveCode) }
                 .onSuccess {
                     _uiState.update { it.copy(isBusy = false, message = "扫码授权成功") }
@@ -264,6 +303,46 @@ class AppViewModel(
                     }
                     _uiState.update { it.copy(isBusy = false, error = readable) }
                 }
+        }
+    }
+
+    private fun exchangeSessionTransferAndLogin(transferCode: String) {
+        val previousState = _uiState.value
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    error = null,
+                    message = null,
+                    pendingMfa = null,
+                    pendingTransferCode = null,
+                )
+            }
+            runCatching {
+                container.authRepository.exchangeSessionTransferForMobile(transferCode)
+                container.authRepository.getCurrentUser()
+            }.onSuccess { user ->
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        isAuthenticated = true,
+                        currentUser = user,
+                        pendingMfa = null,
+                        pendingTransferCode = null,
+                        message = "扫码登录成功",
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        isAuthenticated = previousState.isAuthenticated,
+                        currentUser = previousState.currentUser,
+                        pendingTransferCode = null,
+                        error = throwable.toReadableMessage(),
+                    )
+                }
+            }
         }
     }
 
@@ -290,6 +369,7 @@ class AppViewModel(
                                     isAuthenticated = true,
                                     currentUser = user,
                                     pendingMfa = null,
+                                    pendingTransferCode = null,
                                     message = successMessage,
                                 )
                             }
@@ -316,6 +396,7 @@ class AppViewModel(
                         isBusy = false,
                         isAuthenticated = false,
                         pendingMfa = result,
+                        pendingTransferCode = null,
                         message = "$sourceLabel 验证通过，请完成 MFA",
                     )
                 }
@@ -344,6 +425,32 @@ class AppViewModel(
         return runCatching {
             val uri = Uri.parse(raw)
             (uri.getQueryParameter("approveCode") ?: uri.getQueryParameter("code"))
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun extractTransferCode(content: String): String? {
+        val raw = content.trim()
+        if (raw.isBlank()) return null
+
+        val prefix = "KSUSER-AUTH-XFER:v1:"
+        if (raw.startsWith(prefix, ignoreCase = true)) {
+            return raw.substring(prefix.length).trim().takeIf { it.isNotBlank() }
+        }
+
+        val markerIndex = raw.indexOf(prefix, ignoreCase = true)
+        if (markerIndex >= 0) {
+            return raw.substring(markerIndex + prefix.length)
+                .substringBefore('&')
+                .substringBefore('#')
+                .trim()
+                .takeIf { it.isNotBlank() }
+        }
+
+        return runCatching {
+            val uri = Uri.parse(raw)
+            uri.getQueryParameter("transferCode")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
         }.getOrNull()

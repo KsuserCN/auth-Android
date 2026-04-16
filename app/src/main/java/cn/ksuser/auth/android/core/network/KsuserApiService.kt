@@ -22,6 +22,7 @@ import cn.ksuser.auth.android.data.model.QrApproveRequest
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
 import cn.ksuser.auth.android.data.model.SendCodeRequest
+import cn.ksuser.auth.android.data.model.SessionTransferExchangeRequest
 import cn.ksuser.auth.android.data.model.SessionItem
 import cn.ksuser.auth.android.data.model.SensitiveVerificationStatus
 import cn.ksuser.auth.android.data.model.TokenPayload
@@ -105,6 +106,11 @@ interface KsuserApiService {
 
     @POST("/auth/logout")
     suspend fun logout(): Response<ApiEnvelope<Unit>>
+
+    @POST("/auth/session-transfer/exchange")
+    suspend fun exchangeSessionTransfer(
+        @Body request: SessionTransferExchangeRequest,
+    ): Response<ApiEnvelope<TokenPayload>>
 
     @POST("/auth/qr/approve")
     suspend fun approveQrChallenge(

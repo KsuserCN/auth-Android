@@ -17,6 +17,7 @@ import cn.ksuser.auth.android.data.model.PasswordRequirement
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
 import cn.ksuser.auth.android.data.model.SendCodeRequest
+import cn.ksuser.auth.android.data.model.SessionTransferExchangeRequest
 import cn.ksuser.auth.android.data.model.TotpMfaVerifyRequest
 import cn.ksuser.auth.android.data.model.UserProfile
 import com.google.gson.Gson
@@ -53,6 +54,21 @@ class AuthRepository(
     suspend fun approveQrChallenge(approveCode: String) {
         val envelope = executeEnvelope(gson) { api.approveQrChallenge(QrApproveRequest(approveCode.trim())) }
         requireCode(envelope, 200)
+    }
+
+    suspend fun exchangeSessionTransferForMobile(transferCode: String): String {
+        val envelope = executeEnvelope(gson) {
+            api.exchangeSessionTransfer(
+                SessionTransferExchangeRequest(
+                    transferCode = transferCode.trim(),
+                    target = "mobile",
+                ),
+            )
+        }
+        requireCode(envelope, 200)
+        return envelope.data?.accessToken
+            ?.also(sessionRepository::persistAccessToken)
+            ?: error("跨端登录 AccessToken 缺失")
     }
 
     suspend fun passwordLogin(email: String, password: String): AuthResult {

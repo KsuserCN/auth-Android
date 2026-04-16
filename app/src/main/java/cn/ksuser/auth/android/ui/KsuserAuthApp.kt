@@ -191,6 +191,24 @@ fun KsuserAuthApp() {
             )
         }
     }
+
+    if (!state.pendingTransferCode.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelTransferLogin() },
+            title = { Text("确认切换账号") },
+            text = { Text("检测到跨端登录二维码。继续后将使用二维码对应账号登录当前手机端。") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmTransferLogin() }) {
+                    Text("继续登录")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelTransferLogin() }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -225,6 +243,16 @@ private fun AuthFlowScreen(
     val darkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
     val activity = context as? Activity
+    var showQrScanner by rememberSaveable { mutableStateOf(false) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            showQrScanner = true
+        } else {
+            Toast.makeText(context, "相机权限被拒绝，无法扫码", Toast.LENGTH_SHORT).show()
+        }
+    }
     var authTab by rememberSaveable { mutableStateOf(0) }
     var loginMethod by rememberSaveable { mutableStateOf(0) }
     var email by rememberSaveable { mutableStateOf("") }
@@ -267,6 +295,25 @@ private fun AuthFlowScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.CAMERA,
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (granted) {
+                                showQrScanner = true
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Outlined.Badge, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("扫码登录 / 扫码授权")
+                    }
                     Spacer(modifier = Modifier.height(20.dp))
 
                     if (state.pendingMfa != null) {
@@ -505,6 +552,16 @@ private fun AuthFlowScreen(
             }
         }
     }
+
+    if (showQrScanner) {
+        QrScannerDialog(
+            onDismiss = { showQrScanner = false },
+            onDetected = { rawContent ->
+                showQrScanner = false
+                viewModel.handleScannedQr(rawContent)
+            },
+        )
+    }
 }
 
 @Composable
@@ -684,7 +741,7 @@ private fun MainShell(
             onDismiss = { showQrScanner = false },
             onDetected = { rawContent ->
                 showQrScanner = false
-                viewModel.approveQrChallenge(rawContent)
+                viewModel.handleScannedQr(rawContent)
             },
         )
     }

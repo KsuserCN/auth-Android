@@ -267,6 +267,11 @@ data class TotpMfaVerifyRequest(
     val recoveryCode: String? = null,
 )
 
+data class SessionTransferExchangeRequest(
+    val transferCode: String,
+    val target: String,
+)
+
 data class UpdateSettingRequest(
     val field: String,
     val value: Boolean? = null,
