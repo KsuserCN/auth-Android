@@ -13,6 +13,7 @@ import cn.ksuser.auth.android.data.model.PasskeyAuthenticationPayload
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationVerifyRequest
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
 import cn.ksuser.auth.android.data.model.QrApproveRequest
+import cn.ksuser.auth.android.data.model.QrScanPreview
 import cn.ksuser.auth.android.data.model.PasswordRequirement
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
@@ -54,6 +55,20 @@ class AuthRepository(
     suspend fun approveQrChallenge(approveCode: String) {
         val envelope = executeEnvelope(gson) { api.approveQrChallenge(QrApproveRequest(approveCode.trim())) }
         requireCode(envelope, 200)
+    }
+
+    suspend fun getQrScanPreview(
+        approveCode: String? = null,
+        transferCode: String? = null,
+    ): QrScanPreview {
+        val envelope = executeEnvelope(gson) {
+            api.getQrScanPreview(
+                approveCode = approveCode?.trim()?.takeIf { it.isNotBlank() },
+                transferCode = transferCode?.trim()?.takeIf { it.isNotBlank() },
+            )
+        }
+        requireCode(envelope, 200)
+        return envelope.data ?: error("二维码预览信息为空")
     }
 
     suspend fun exchangeSessionTransferForMobile(transferCode: String): String {

@@ -19,6 +19,7 @@ import cn.ksuser.auth.android.data.model.PaginatedSensitiveLogs
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
 import cn.ksuser.auth.android.data.model.PasswordRequirement
 import cn.ksuser.auth.android.data.model.QrApproveRequest
+import cn.ksuser.auth.android.data.model.QrScanPreview
 import cn.ksuser.auth.android.data.model.RegisterRequest
 import cn.ksuser.auth.android.data.model.RegisterResponse
 import cn.ksuser.auth.android.data.model.SendCodeRequest
@@ -116,6 +117,12 @@ interface KsuserApiService {
     suspend fun approveQrChallenge(
         @Body request: QrApproveRequest,
     ): Response<ApiEnvelope<Unit>>
+
+    @GET("/auth/qr/preview")
+    suspend fun getQrScanPreview(
+        @Query("approveCode") approveCode: String? = null,
+        @Query("transferCode") transferCode: String? = null,
+    ): Response<ApiEnvelope<QrScanPreview>>
 
     @POST("/auth/logout/all")
     suspend fun logoutAll(): Response<ApiEnvelope<Unit>>

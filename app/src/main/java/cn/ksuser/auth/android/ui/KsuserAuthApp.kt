@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +37,7 @@ fun KsuserAuthApp() {
     val container = remember(context) { (context.applicationContext as KsuserAuthApplication).appContainer }
     val viewModel: AppViewModel = viewModel(factory = AppViewModelFactory(container))
     val state by viewModel.uiState.collectAsState()
+    val pendingQrConfirmation = state.pendingQrConfirmation
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -56,6 +55,13 @@ fun KsuserAuthApp() {
     Surface(modifier = Modifier.fillMaxSize()) {
         when {
             state.isBootstrapping -> LoadingScreen()
+            pendingQrConfirmation != null -> QrLoginConfirmScreen(
+                pending = pendingQrConfirmation,
+                currentUser = state.currentUser,
+                isBusy = state.isBusy,
+                onConfirm = { viewModel.confirmQrAction() },
+                onCancel = { viewModel.cancelQrAction() },
+            )
             state.pendingMfa != null || !state.isAuthenticated -> AuthFlowScreen(
                 state = state,
                 container = container,
@@ -71,24 +77,6 @@ fun KsuserAuthApp() {
                 onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
             )
         }
-    }
-
-    if (!state.pendingTransferCode.isNullOrBlank()) {
-        AlertDialog(
-            onDismissRequest = { viewModel.cancelTransferLogin() },
-            title = { Text("确认切换账号") },
-            text = { Text("检测到跨端登录二维码。继续后将使用二维码对应账号登录当前手机端。") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.confirmTransferLogin() }) {
-                    Text("继续登录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.cancelTransferLogin() }) {
-                    Text("取消")
-                }
-            },
-        )
     }
 }
 

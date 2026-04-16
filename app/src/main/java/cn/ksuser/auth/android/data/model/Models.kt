@@ -225,6 +225,16 @@ data class QrApproveRequest(
     val approveCode: String,
 )
 
+data class QrScanPreview(
+    val codeType: String,
+    val clientName: String? = null,
+    val browser: String? = null,
+    val system: String? = null,
+    val ipAddress: String? = null,
+    val ipLocation: String? = null,
+    val expiresInSeconds: Long = 0,
+)
+
 data class RegisterRequest(
     val username: String,
     val email: String,
