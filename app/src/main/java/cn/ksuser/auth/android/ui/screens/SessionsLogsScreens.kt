@@ -2,13 +2,11 @@ package cn.ksuser.auth.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,9 +27,11 @@ import androidx.compose.material.icons.outlined.LaptopWindows
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -40,8 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,10 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import cn.ksuser.auth.android.data.AppContainer
@@ -75,7 +71,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @Composable
 internal fun SessionsScreen(
@@ -85,6 +80,8 @@ internal fun SessionsScreen(
 ) {
     var sessions by remember { mutableStateOf(emptyList<SessionItem>()) }
     var loading by remember { mutableStateOf(true) }
+    var pendingRevokeSession by remember { mutableStateOf<SessionItem?>(null) }
+    val scope = rememberCoroutineScope()
 
     suspend fun reload() {
         loading = true
@@ -136,21 +133,9 @@ internal fun SessionsScreen(
         }
 
         items(sessions, key = { it.id }) { session ->
-            SwipeRevealSessionCard(
+            SessionCardWithCornerRevoke(
                 session = session,
-                onRevoke = {
-                    if (session.current) {
-                        onMessage("无法撤销当前会话")
-                        return@SwipeRevealSessionCard
-                    }
-                    val revoked = runCatching { container.sessionsRepository.revokeSession(session.id) }
-                        .onFailure { onMessage(it.message ?: "撤销会话失败") }
-                        .isSuccess
-                    if (revoked) {
-                        reload()
-                        onMessage("会话已撤销")
-                    }
-                },
+                onRequestRevoke = { pendingRevokeSession = session },
             )
         }
 
@@ -173,6 +158,42 @@ internal fun SessionsScreen(
                 )
             }
         }
+    }
+
+    pendingRevokeSession?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingRevokeSession = null },
+            title = { Text("确认撤销会话") },
+            text = {
+                Text(
+                    "将撤销 ${getClientDisplayName(target)}（${target.ipAddress}）的登录状态，确定继续吗？",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingRevokeSession = null
+                        if (target.current) {
+                            onMessage("无法撤销当前会话")
+                            return@TextButton
+                        }
+                        scope.launch {
+                            val revoked = runCatching { container.sessionsRepository.revokeSession(target.id) }
+                                .onFailure { onMessage(it.message ?: "撤销会话失败") }
+                                .isSuccess
+                            if (revoked) {
+                                reload()
+                                onMessage("会话已撤销")
+                            }
+                        }
+                    },
+                ) { Text("确认") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRevokeSession = null }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -413,84 +434,44 @@ internal fun LogsScreen(
 }
 
 @Composable
-private fun SwipeRevealSessionCard(
+private fun SessionCardWithCornerRevoke(
     session: SessionItem,
-    onRevoke: suspend () -> Unit,
+    onRequestRevoke: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val revealWidth = 88.dp
-    val revealWidthPx = with(LocalDensity.current) { revealWidth.toPx() }
-    val offsetX = remember(session.id) { Animatable(0f) }
-    val actionEnabled = !session.current
+    val showAction = !session.current
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(revealWidth)
-                .fillMaxHeight()
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 0.dp,
-                        bottomStart = 0.dp,
-                        topEnd = AppRadius.R20,
-                        bottomEnd = AppRadius.R20,
-                    ),
-                )
-                .background(
-                    if (actionEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(enabled = actionEnabled) {
-                        scope.launch {
-                            onRevoke()
-                            offsetX.animateTo(0f, animationSpec = tween(160))
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "撤销",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (actionEnabled) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
         SectionCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .pointerInput(session.id) {
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            scope.launch {
-                                val next = (offsetX.value + dragAmount).coerceIn(-revealWidthPx, 0f)
-                                offsetX.snapTo(next)
-                            }
-                        },
-                        onDragEnd = {
-                            scope.launch {
-                                val target = if (offsetX.value < -revealWidthPx * 0.45f) -revealWidthPx else 0f
-                                offsetX.animateTo(target, animationSpec = tween(180))
-                            }
-                        },
-                        onDragCancel = {
-                            scope.launch {
-                                val target = if (offsetX.value < -revealWidthPx * 0.45f) -revealWidthPx else 0f
-                                offsetX.animateTo(target, animationSpec = tween(180))
-                            }
-                        },
-                    )
-                },
+            modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(AppSpacing.S16),
         ) {
             SessionCardContent(session = session)
+        }
+
+        if (showAction) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(44.dp)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = AppRadius.R12,
+                            topEnd = 0.dp,
+                            bottomStart = 0.dp,
+                            bottomEnd = AppRadius.R20,
+                        ),
+                    )
+                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.78f))
+                    .clickable { onRequestRevoke() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = "撤销会话",
+                    tint = MaterialTheme.colorScheme.onError,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
