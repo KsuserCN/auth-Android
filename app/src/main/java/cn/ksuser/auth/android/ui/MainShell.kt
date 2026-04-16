@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -100,7 +100,7 @@ internal fun MainShell(
                             }
                         },
                     ) {
-                        Icon(Icons.Outlined.Badge, contentDescription = "扫码授权")
+                        Icon(Icons.Outlined.QrCodeScanner, contentDescription = "扫码授权")
                     }
                     IconButton(onClick = { viewModel.refreshCurrentUser() }) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "刷新用户信息")

@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -124,7 +124,7 @@ internal fun AuthFlowScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(Icons.Outlined.Badge, contentDescription = null)
+                        Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                         androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(horizontal = AppSpacing.S8))
                         Text("扫码登录 / 扫码授权")
                     }
