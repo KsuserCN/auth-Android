@@ -34,6 +34,9 @@ class UiSmokeTest {
                         ),
                     ),
                     onRefresh = {},
+                    onOpenProfile = {},
+                    onOpenSecurity = {},
+                    onOpenSessions = {},
                 )
             }
         }
