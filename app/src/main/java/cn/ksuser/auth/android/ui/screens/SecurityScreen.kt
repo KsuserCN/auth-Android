@@ -1,6 +1,12 @@
 package cn.ksuser.auth.android.ui
 
 import android.app.Activity
+import android.content.Context
+import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +47,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +55,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,6 +90,12 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
+
+private const val DELETE_ACCOUNT_CONFIRM_TEXT = "我真的不想要我的号辣"
+private const val GYRO_SHAKE_THRESHOLD = 3.2f
+private const val ACCEL_SHAKE_THRESHOLD = 14f
+private const val GYRO_SHAKE_COOLDOWN_MS = 300L
 
 @Composable
 internal fun SecurityScreen(
@@ -1070,20 +1084,107 @@ private fun DeleteAccountDialog(
     onDeleted: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
-    var confirmText by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    var requiredShakes by rememberSaveable { mutableStateOf((6..9).random()) }
+    var shakeCount by rememberSaveable { mutableStateOf(0) }
+    var currentSpeed by remember { mutableStateOf(0f) }
+    var hasMotionSensor by remember { mutableStateOf(true) }
+    var sensorLabel by remember { mutableStateOf("运动传感器") }
+    var lastShakeAt by remember { mutableStateOf(0L) }
+    val verified = shakeCount >= requiredShakes
+
+    fun resetChallenge() {
+        requiredShakes = (6..9).random()
+        shakeCount = 0
+        currentSpeed = 0f
+        lastShakeAt = 0L
+    }
+
+    DisposableEffect(requiredShakes) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val packageManager = context.packageManager
+        val motionSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE_UNCALIBRATED)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+            ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (sensorManager == null || motionSensor == null) {
+            hasMotionSensor = packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)
+            onDispose { }
+        } else {
+            hasMotionSensor = true
+            sensorLabel = when (motionSensor.type) {
+                Sensor.TYPE_GYROSCOPE -> "陀螺仪"
+                Sensor.TYPE_GYROSCOPE_UNCALIBRATED -> "未校准陀螺仪"
+                Sensor.TYPE_LINEAR_ACCELERATION -> "线性加速度计"
+                Sensor.TYPE_ACCELEROMETER -> "加速度计"
+                else -> "运动传感器"
+            }
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent?) {
+                    val values = event?.values ?: return
+                    val magnitude = sqrt(
+                        (values[0] * values[0] + values[1] * values[1] + values[2] * values[2]).toDouble(),
+                    ).toFloat()
+                    val normalizedSpeed = if (motionSensor.type == Sensor.TYPE_GYROSCOPE ||
+                        motionSensor.type == Sensor.TYPE_GYROSCOPE_UNCALIBRATED
+                    ) {
+                        magnitude
+                    } else {
+                        magnitude - SensorManager.GRAVITY_EARTH
+                    }
+                    currentSpeed = normalizedSpeed.coerceAtLeast(0f)
+                    if (verified) return
+                    val now = System.currentTimeMillis()
+                    val threshold = if (motionSensor.type == Sensor.TYPE_GYROSCOPE ||
+                        motionSensor.type == Sensor.TYPE_GYROSCOPE_UNCALIBRATED
+                    ) {
+                        GYRO_SHAKE_THRESHOLD
+                    } else {
+                        ACCEL_SHAKE_THRESHOLD
+                    }
+                    if (currentSpeed >= threshold && now - lastShakeAt >= GYRO_SHAKE_COOLDOWN_MS) {
+                        lastShakeAt = now
+                        shakeCount = (shakeCount + 1).coerceAtMost(requiredShakes)
+                    }
+                }
+
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            }
+            sensorManager.registerListener(listener, motionSensor, SensorManager.SENSOR_DELAY_GAME)
+            onDispose { sensorManager.unregisterListener(listener) }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("删除账号") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
-                Text("输入 DELETE 以确认删除账号。")
-                AppOutlinedField(value = confirmText, onValueChange = { confirmText = it }, label = { Text("确认文本") })
+                Text("请完成晃动验证后再删除账号。")
+                if (hasMotionSensor) {
+                    Text("已检测传感器：$sensorLabel")
+                    LinearProgressIndicator(
+                        progress = { shakeCount.toFloat() / requiredShakes.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("晃动进度：$shakeCount / $requiredShakes")
+                    Text("当前运动强度：${"%.2f".format(currentSpeed)}")
+                    if (verified) {
+                        Text("验证通过，可以继续删除。", color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text("手持手机连续晃动完成验证。")
+                    }
+                    OutlinedButton(onClick = ::resetChallenge) {
+                        Text("重新验证")
+                    }
+                } else {
+                    Text("当前设备未检测到可用运动传感器，无法完成验证。")
+                }
             }
         },
         confirmButton = {
-            LoadingTextButton(text = "删除", onClick = {
-                runCatching { container.securityRepository.deleteAccount(confirmText) }
+            LoadingTextButton(text = "删除", enabled = hasMotionSensor && verified, onClick = {
+                runCatching { container.securityRepository.deleteAccount(DELETE_ACCOUNT_CONFIRM_TEXT) }
                     .onSuccess { onDeleted() }
                     .onFailure { onMessage(it.message ?: "删除账号失败") }
             })
