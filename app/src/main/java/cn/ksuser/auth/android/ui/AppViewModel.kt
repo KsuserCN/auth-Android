@@ -34,6 +34,7 @@ data class PendingQrConfirmation(
     val type: QrConfirmationType,
     val code: String,
     val preview: QrScanPreview? = null,
+    val operationHint: String? = null,
 )
 
 enum class QrConfirmationType {
@@ -265,9 +266,10 @@ class AppViewModel(
     }
 
     fun handleScannedQr(rawContent: String) {
+        val operationHint = extractOperationHint(rawContent)
         val transferCode = extractTransferCode(rawContent)
         if (!transferCode.isNullOrBlank()) {
-            previewTransferQr(transferCode)
+            previewTransferQr(transferCode, operationHint)
             return
         }
 
@@ -277,7 +279,7 @@ class AppViewModel(
             return
         }
 
-        previewApproveQr(approveCode)
+        previewApproveQr(approveCode, operationHint)
     }
 
     fun confirmQrAction() {
@@ -300,19 +302,27 @@ class AppViewModel(
         _uiState.update { it.copy(pendingQrConfirmation = null) }
     }
 
-    private fun previewApproveQr(approveCode: String) {
+    private fun previewApproveQr(
+        approveCode: String,
+        operationHint: String? = null,
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, message = null, error = null, pendingQrConfirmation = null) }
             runCatching {
                 val preview = container.authRepository.getQrScanPreview(approveCode = approveCode)
+                val type = when (preview.codeType) {
+                    "approve_mfa" -> QrConfirmationType.APPROVE_MFA
+                    "approve_sensitive" -> QrConfirmationType.APPROVE_SENSITIVE
+                    else -> QrConfirmationType.APPROVE_LOGIN
+                }
                 PendingQrConfirmation(
-                    type = when (preview.codeType) {
-                        "approve_mfa" -> QrConfirmationType.APPROVE_MFA
-                        "approve_sensitive" -> QrConfirmationType.APPROVE_SENSITIVE
-                        else -> QrConfirmationType.APPROVE_LOGIN
-                    },
+                    type = type,
                     code = approveCode,
                     preview = preview,
+                    operationHint = resolveOperationHint(
+                        parsedHint = operationHint,
+                        fallbackType = type,
+                    ),
                 )
             }.onSuccess { pending ->
                 _uiState.update { it.copy(isBusy = false, pendingQrConfirmation = pending) }
@@ -322,20 +332,28 @@ class AppViewModel(
         }
     }
 
-    private fun previewTransferQr(transferCode: String) {
+    private fun previewTransferQr(
+        transferCode: String,
+        operationHint: String? = null,
+    ) {
         val isAuthenticated = _uiState.value.isAuthenticated
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, message = null, error = null, pendingQrConfirmation = null) }
             runCatching {
                 val preview = container.authRepository.getQrScanPreview(transferCode = transferCode)
+                val type = if (isAuthenticated) {
+                    QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE
+                } else {
+                    QrConfirmationType.LOGIN_THIS_PHONE
+                }
                 PendingQrConfirmation(
-                    type = if (isAuthenticated) {
-                        QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE
-                    } else {
-                        QrConfirmationType.LOGIN_THIS_PHONE
-                    },
+                    type = type,
                     code = transferCode,
                     preview = preview,
+                    operationHint = resolveOperationHint(
+                        parsedHint = operationHint,
+                        fallbackType = type,
+                    ),
                 )
             }.onSuccess { pending ->
                 _uiState.update { it.copy(isBusy = false, pendingQrConfirmation = pending) }
@@ -511,6 +529,64 @@ class AppViewModel(
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
         }.getOrNull()
+    }
+
+    private fun extractOperationHint(content: String): String? {
+        val raw = content.trim()
+        if (raw.isBlank()) return null
+
+        val uriHint = runCatching {
+            val uri = Uri.parse(raw)
+            listOf("operationType", "operation", "type", "action", "scene")
+                .firstNotNullOfOrNull { key ->
+                    uri.getQueryParameter(key)?.trim()?.takeIf { it.isNotBlank() }
+                }
+        }.getOrNull()
+        canonicalizeOperationHint(uriHint)?.let { return it }
+
+        val tokenHint = raw.split('?', '&', '#', ':', '/', '=', ';', ',', ' ')
+            .asSequence()
+            .map { it.trim() }
+            .firstNotNullOfOrNull { token -> canonicalizeOperationHint(token) }
+        return tokenHint
+    }
+
+    private fun resolveOperationHint(
+        parsedHint: String?,
+        fallbackType: QrConfirmationType,
+    ): String {
+        return canonicalizeOperationHint(parsedHint) ?: when (fallbackType) {
+            QrConfirmationType.APPROVE_LOGIN -> "LOGIN"
+            QrConfirmationType.APPROVE_MFA -> "MFA_VERIFY"
+            QrConfirmationType.APPROVE_SENSITIVE -> "SENSITIVE_VERIFY"
+            QrConfirmationType.LOGIN_THIS_PHONE -> "LOGIN_THIS_PHONE"
+            QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE -> "SWITCH_AND_LOGIN_THIS_PHONE"
+        }
+    }
+
+    private fun canonicalizeOperationHint(raw: String?): String? {
+        val normalized = raw
+            ?.trim()
+            ?.replace('-', '_')
+            ?.replace(' ', '_')
+            ?.uppercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        return when (normalized) {
+            "APPROVE_LOGIN", "LOGIN", "LOGIN_WEB", "LOGIN_DESKTOP" -> "LOGIN"
+            "APPROVE_MFA", "MFA", "MFA_VERIFY", "VERIFY_MFA", "LOGIN_MFA" -> "MFA_VERIFY"
+            "APPROVE_SENSITIVE", "SENSITIVE", "SENSITIVE_VERIFY", "VERIFY_SENSITIVE" -> "SENSITIVE_VERIFY"
+            "CHANGE_PASSWORD", "UPDATE_PASSWORD", "RESET_PASSWORD" -> "CHANGE_PASSWORD"
+            "CHANGE_EMAIL", "UPDATE_EMAIL", "BIND_EMAIL" -> "CHANGE_EMAIL"
+            "ADD_PASSKEY", "CREATE_PASSKEY", "REGISTER_PASSKEY" -> "ADD_PASSKEY"
+            "DELETE_PASSKEY", "REMOVE_PASSKEY" -> "DELETE_PASSKEY"
+            "ENABLE_TOTP", "OPEN_TOTP" -> "ENABLE_TOTP"
+            "DISABLE_TOTP", "CLOSE_TOTP" -> "DISABLE_TOTP"
+            "LOGIN_THIS_PHONE", "TRANSFER", "TRANSFER_LOGIN", "BRIDGE_TO_MOBILE" -> "LOGIN_THIS_PHONE"
+            "SWITCH_AND_LOGIN_THIS_PHONE", "SWITCH_LOGIN", "TRANSFER_SWITCH_LOGIN" -> "SWITCH_AND_LOGIN_THIS_PHONE"
+            else -> null
+        }
     }
 
     private fun runBusyAction(
