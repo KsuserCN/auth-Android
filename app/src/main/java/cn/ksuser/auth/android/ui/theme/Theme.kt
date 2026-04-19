@@ -8,6 +8,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
@@ -92,4 +94,26 @@ fun KsuserAuthAndroidTheme(
         shapes = AppShapes,
         content = content
     )
+}
+
+@Composable
+fun rememberAppBackgroundBrush(): Brush {
+    val colorScheme = MaterialTheme.colorScheme
+    val darkTheme = isSystemInDarkTheme()
+    return remember(colorScheme, darkTheme) {
+        val colors = if (darkTheme) {
+            listOf(
+                colorScheme.surfaceDim,
+                colorScheme.background,
+                colorScheme.surfaceContainerLow,
+            )
+        } else {
+            listOf(
+                colorScheme.surfaceBright,
+                colorScheme.background,
+                colorScheme.surfaceContainerLow,
+            )
+        }
+        Brush.verticalGradient(colors)
+    }
 }

@@ -43,7 +43,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -56,10 +55,7 @@ import cn.ksuser.auth.android.ui.components.AppSpacing
 import cn.ksuser.auth.android.ui.components.GradientPrimaryButton
 import cn.ksuser.auth.android.ui.components.LoadingButtonContent
 import cn.ksuser.auth.android.ui.components.SectionCard
-import cn.ksuser.auth.android.ui.theme.GoldGradientBottomDark
-import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
-import cn.ksuser.auth.android.ui.theme.GoldGradientTopDark
-import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
+import cn.ksuser.auth.android.ui.theme.rememberAppBackgroundBrush
 import kotlinx.coroutines.launch
 
 @Composable
@@ -91,6 +87,7 @@ internal fun AuthFlowScreen(
     var useRecoveryCode by rememberSaveable { mutableStateOf(false) }
     val passkeyAvailability = remember(container) { container.passkeyManager.availability() }
     val passkeyAvailabilityMessage = remember(container) { container.passkeyManager.availabilityMessage() }
+    val backgroundBrush = rememberAppBackgroundBrush()
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -100,11 +97,7 @@ internal fun AuthFlowScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(
-                    Brush.linearGradient(
-                        listOf(GoldGradientTopLight, GoldGradientBottomLight),
-                    ),
-                )
+                .background(backgroundBrush)
                 .verticalScroll(rememberScrollState())
                 .padding(AppPagePadding),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.S20),
@@ -215,7 +208,7 @@ internal fun AuthFlowScreen(
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
                         tonalElevation = 1.dp,
                     ) {

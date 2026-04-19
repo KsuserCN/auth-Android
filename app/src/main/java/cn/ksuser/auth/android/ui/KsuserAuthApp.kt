@@ -20,15 +20,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.ksuser.auth.android.KsuserAuthApplication
 import cn.ksuser.auth.android.ui.components.AppSpacing
-import cn.ksuser.auth.android.ui.theme.GoldGradientBottomDark
-import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
-import cn.ksuser.auth.android.ui.theme.GoldGradientTopDark
-import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
+import cn.ksuser.auth.android.ui.theme.rememberAppBackgroundBrush
 import kotlinx.coroutines.launch
 
 @Composable
@@ -82,14 +78,11 @@ fun KsuserAuthApp() {
 
 @Composable
 private fun LoadingScreen() {
+    val backgroundBrush = rememberAppBackgroundBrush()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(GoldGradientTopLight, GoldGradientBottomLight),
-                ),
-            ),
+            .background(backgroundBrush),
         contentAlignment = Alignment.Center,
     ) {
         Column(

@@ -55,8 +55,7 @@ import cn.ksuser.auth.android.ui.components.GradientPrimaryButton
 import cn.ksuser.auth.android.ui.components.SectionCard
 import cn.ksuser.auth.android.ui.theme.BrandButtonGradientEnd
 import cn.ksuser.auth.android.ui.theme.BrandButtonGradientStart
-import cn.ksuser.auth.android.ui.theme.GoldGradientBottomLight
-import cn.ksuser.auth.android.ui.theme.GoldGradientTopLight
+import cn.ksuser.auth.android.ui.theme.rememberAppBackgroundBrush
 
 @Composable
 internal fun QrLoginConfirmScreen(
@@ -67,18 +66,12 @@ internal fun QrLoginConfirmScreen(
     onCancel: () -> Unit,
 ) {
     val visual = rememberConfirmationVisual(pending, currentUser)
+    val backgroundBrush = rememberAppBackgroundBrush()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        GoldGradientTopLight,
-                        GoldGradientBottomLight,
-                    ),
-                ),
-            )
+            .background(backgroundBrush)
             .safeDrawingPadding(),
     ) {
         Column(
