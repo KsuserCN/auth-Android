@@ -404,19 +404,43 @@ internal fun SecurityScreen(
                 }
             } else {
                 val tone = adaptiveRiskColor(status.riskLevel)
+                val decision = status.policyDecision.uppercase()
+                val decisionLabel = adaptivePolicyLabel(decision)
+                val title = when (decision) {
+                    "FREEZE" -> "高风险会话已冻结"
+                    "STEP_UP" -> "建议立即补做验证"
+                    else -> "当前会话可信度稳定"
+                }
+                val subtitle = when (decision) {
+                    "FREEZE" -> "检测到高风险信号，当前会话已冻结，请重新登录并完成验证"
+                    "STEP_UP" -> status.recommendedAction.ifBlank { "当前会话风险中等，需完成 step-up 验证后继续敏感操作" }
+                    else -> status.recommendedAction.ifBlank { "当前会话风险较低，可继续使用" }
+                }
                 SecurityActionCard(
-                    icon = if (status.trusted) Icons.Outlined.CheckCircle else Icons.Outlined.Security,
-                    title = if (status.requiresStepUp) "建议立即补做验证" else "当前会话可信度稳定",
-                    subtitle = status.recommendedAction.ifBlank { "当前会话风险较低，可继续使用" },
-                    statusIcon = Icons.Outlined.Info,
-                    statusAccent = status.trusted,
-                    actionLabel = "${adaptiveRiskLabel(status.riskLevel)}风险 ${status.riskScore}",
+                    icon = when (decision) {
+                        "FREEZE" -> Icons.Outlined.Shield
+                        "STEP_UP" -> Icons.Outlined.Security
+                        else -> Icons.Outlined.CheckCircle
+                    },
+                    title = title,
+                    subtitle = subtitle,
+                    statusIcon = when (decision) {
+                        "FREEZE" -> Icons.Outlined.Shield
+                        "STEP_UP" -> Icons.Outlined.Security
+                        else -> Icons.Outlined.CheckCircle
+                    },
+                    statusAccent = decision == "ALLOW" && status.trusted,
+                    actionLabel = "${adaptiveRiskLabel(status.riskLevel)}风险 ${status.riskScore} · $decisionLabel",
                     onClick = {
-                        if (!status.sensitiveVerified) {
+                        if (!status.sensitiveVerified && !status.sessionFrozen) {
                             showSensitiveDialog = true
                         }
                     },
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                    RiskMetaChip("策略决策", decisionLabel)
+                    RiskMetaChip("策略版本", status.policyVersion.ifBlank { "2.0.0" })
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
                     RiskMetaChip("敏感验证", if (status.sensitiveVerified) "有效 ${status.sensitiveVerificationRemainingSeconds} 秒" else "未验证")
                     RiskMetaChip("会话年龄", formatDurationSeconds(status.authAgeSeconds))
@@ -424,6 +448,51 @@ internal fun SecurityScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
                     RiskMetaChip("空闲时长", formatDurationSeconds(status.idleSeconds))
                     RiskMetaChip("当前环境", listOfNotNull(status.currentLocation, status.deviceType).joinToString(" / ").ifBlank { "未知环境" })
+                }
+                if (status.multiEndpointAlert) {
+                    val alertTone = adaptiveAlertColor(status.alertLevel)
+                    SectionCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.S12),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(alertTone.copy(alpha = 0.14f), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = if ((status.alertLevel ?: "").equals("high", ignoreCase = true)) {
+                                        Icons.Outlined.Shield
+                                    } else {
+                                        Icons.Outlined.Info
+                                    },
+                                    contentDescription = null,
+                                    tint = alertTone,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                                Text(
+                                    status.alertTitle?.ifBlank { "风险告警" } ?: "风险告警",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    status.alertMessage?.ifBlank { "检测到风险信号，请尽快处理" } ?: "检测到风险信号，请尽快处理",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (status.alertRemainingSeconds > 0) {
+                                    Text(
+                                        "告警剩余有效期 ${status.alertRemainingSeconds} 秒",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 if (status.reasons.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
@@ -441,10 +510,17 @@ internal fun SecurityScreen(
                         }
                     }
                 }
-                if (!status.sensitiveVerified) {
+                if (!status.sensitiveVerified && !status.sessionFrozen) {
                     OutlinedButton(onClick = { showSensitiveDialog = true }) {
                         Text("立即验证")
                     }
+                }
+                if (status.sessionFrozen) {
+                    Text(
+                        "当前会话已被冻结，请重新登录后继续操作",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
@@ -1202,6 +1278,20 @@ private fun adaptiveRiskColor(level: String) = when (level.lowercase()) {
     "high" -> MaterialTheme.colorScheme.error
     "medium" -> MaterialTheme.colorScheme.tertiary
     else -> MaterialTheme.colorScheme.primary
+}
+
+private fun adaptivePolicyLabel(decision: String): String {
+    return when (decision.uppercase()) {
+        "FREEZE" -> "冻结会话"
+        "STEP_UP" -> "强制补验"
+        else -> "低风险放行"
+    }
+}
+
+@Composable
+private fun adaptiveAlertColor(level: String?) = when ((level ?: "").lowercase()) {
+    "high" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.tertiary
 }
 
 private fun formatDurationSeconds(seconds: Long): String {
