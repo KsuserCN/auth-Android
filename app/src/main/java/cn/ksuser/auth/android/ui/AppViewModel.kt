@@ -25,9 +25,18 @@ data class AppUiState(
     val currentUser: UserProfile? = null,
     val passwordRequirement: PasswordRequirement? = null,
     val pendingMfa: AuthResult.NeedsMfa? = null,
+    val pendingMobileBridgeConfirmation: PendingMobileBridgeConfirmation? = null,
+    val mobileBridgeReturnUrl: String? = null,
     val pendingQrConfirmation: PendingQrConfirmation? = null,
     val message: String? = null,
     val error: String? = null,
+)
+
+data class PendingMobileBridgeConfirmation(
+    val challengeId: String,
+    val returnUrl: String? = null,
+    val returnOrigin: String? = null,
+    val requiresLogin: Boolean = false,
 )
 
 data class PendingQrConfirmation(
@@ -67,6 +76,8 @@ class AppViewModel(
                         it.copy(
                             isBootstrapping = false,
                             isAuthenticated = false,
+                            pendingMobileBridgeConfirmation = null,
+                            mobileBridgeReturnUrl = null,
                             pendingQrConfirmation = null,
                             passwordRequirement = requirement,
                         )
@@ -78,6 +89,8 @@ class AppViewModel(
                             isBootstrapping = false,
                             isAuthenticated = true,
                             currentUser = user,
+                            pendingMobileBridgeConfirmation = null,
+                            mobileBridgeReturnUrl = null,
                             pendingQrConfirmation = null,
                             passwordRequirement = requirement,
                         )
@@ -88,6 +101,8 @@ class AppViewModel(
                     it.copy(
                         isBootstrapping = false,
                         isAuthenticated = false,
+                        pendingMobileBridgeConfirmation = null,
+                        mobileBridgeReturnUrl = null,
                         pendingQrConfirmation = null,
                         error = throwable.toReadableMessage(),
                     )
@@ -100,6 +115,19 @@ class AppViewModel(
         _uiState.update { it.copy(message = null, error = null) }
     }
 
+    fun consumeMobileBridgeReturnUrl() {
+        _uiState.update { it.copy(mobileBridgeReturnUrl = null) }
+    }
+
+    fun dismissMobileBridgeForLogin() {
+        _uiState.update {
+            it.copy(
+                pendingMobileBridgeConfirmation = null,
+                message = "请先在 App 内登录，然后回到浏览器重新发起网页登录",
+            )
+        }
+    }
+
     fun refreshCurrentUser() {
         viewModelScope.launch {
             runCatching {
@@ -108,6 +136,123 @@ class AppViewModel(
             }.onFailure { throwable ->
                 _uiState.update { it.copy(error = throwable.toReadableMessage()) }
             }
+        }
+    }
+
+    fun handleIncomingDeepLink(uri: Uri) {
+        val path = uri.path?.trim().orEmpty()
+        if (path != "/app/bridge-login") {
+            return
+        }
+
+        val challengeId = uri.getQueryParameter("challengeId")?.trim().orEmpty()
+        if (challengeId.isBlank()) {
+            _uiState.update { it.copy(error = "网页登录挑战参数缺失") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, error = null, message = null) }
+            runCatching {
+                val status = container.authRepository.getMobileBridgeStatus(challengeId)
+                when (status.status.lowercase()) {
+                    "pending" -> PendingMobileBridgeConfirmation(
+                        challengeId = challengeId,
+                        returnUrl = status.returnUrl,
+                        returnOrigin = status.returnOrigin,
+                        requiresLogin = !_uiState.value.isAuthenticated,
+                    )
+                    "approved" -> {
+                        if (!status.returnUrl.isNullOrBlank()) {
+                            _uiState.update {
+                                it.copy(
+                                    isBusy = false,
+                                    pendingMobileBridgeConfirmation = null,
+                                    mobileBridgeReturnUrl = status.returnUrl,
+                                    message = "网页登录已确认，正在返回浏览器",
+                                )
+                            }
+                        } else {
+                            _uiState.update { it.copy(isBusy = false, error = "网页登录已完成，请返回浏览器") }
+                        }
+                        null
+                    }
+                    "cancelled" -> {
+                        _uiState.update { it.copy(isBusy = false, error = "当前网页登录请求已取消") }
+                        null
+                    }
+                    else -> {
+                        _uiState.update { it.copy(isBusy = false, error = "当前网页登录请求已过期，请回到浏览器重试") }
+                        null
+                    }
+                }
+            }.onSuccess { pending ->
+                if (pending != null) {
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            pendingMobileBridgeConfirmation = pending,
+                        )
+                    }
+                }
+            }.onFailure { throwable ->
+                _uiState.update { it.copy(isBusy = false, error = throwable.toReadableMessage()) }
+            }
+        }
+    }
+
+    fun confirmMobileBridgeAction() {
+        val pending = _uiState.value.pendingMobileBridgeConfirmation ?: return
+        if (pending.requiresLogin) {
+            dismissMobileBridgeForLogin()
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, error = null, message = null) }
+            runCatching { container.authRepository.approveMobileBridge(pending.challengeId) }
+                .onSuccess { response ->
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            pendingMobileBridgeConfirmation = null,
+                            mobileBridgeReturnUrl = response.returnUrl,
+                            message = "网页登录已确认，正在返回浏览器",
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    val readable = if (throwable is ApiException && throwable.statusCode == 401) {
+                        "请先在手机端登录"
+                    } else {
+                        throwable.toReadableMessage()
+                    }
+                    _uiState.update { it.copy(isBusy = false, error = readable) }
+                }
+        }
+    }
+
+    fun cancelMobileBridgeAction() {
+        val pending = _uiState.value.pendingMobileBridgeConfirmation
+        if (pending == null) {
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, error = null, message = null) }
+            runCatching { container.authRepository.cancelMobileBridge(pending.challengeId) }
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            pendingMobileBridgeConfirmation = null,
+                            message = "网页登录请求已取消",
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update { it.copy(isBusy = false, error = throwable.toReadableMessage()) }
+                }
         }
     }
 
@@ -244,6 +389,8 @@ class AppViewModel(
                     isAuthenticated = false,
                     currentUser = null,
                     pendingMfa = null,
+                    pendingMobileBridgeConfirmation = null,
+                    mobileBridgeReturnUrl = null,
                     pendingQrConfirmation = null,
                     message = "已退出登录",
                 )
@@ -259,6 +406,8 @@ class AppViewModel(
                     isAuthenticated = false,
                     currentUser = null,
                     pendingMfa = null,
+                    pendingMobileBridgeConfirmation = null,
+                    mobileBridgeReturnUrl = null,
                     pendingQrConfirmation = null,
                     message = "已从所有设备退出",
                 )
@@ -393,6 +542,8 @@ class AppViewModel(
                     error = null,
                     message = null,
                     pendingMfa = null,
+                    pendingMobileBridgeConfirmation = null,
+                    mobileBridgeReturnUrl = null,
                     pendingQrConfirmation = null,
                 )
             }
@@ -406,6 +557,8 @@ class AppViewModel(
                         isAuthenticated = true,
                         currentUser = user,
                         pendingMfa = null,
+                        pendingMobileBridgeConfirmation = null,
+                        mobileBridgeReturnUrl = null,
                         pendingQrConfirmation = null,
                         message = "扫码登录成功",
                     )
@@ -416,6 +569,8 @@ class AppViewModel(
                         isBusy = false,
                         isAuthenticated = previousState.isAuthenticated,
                         currentUser = previousState.currentUser,
+                        pendingMobileBridgeConfirmation = previousState.pendingMobileBridgeConfirmation,
+                        mobileBridgeReturnUrl = null,
                         pendingQrConfirmation = null,
                         error = throwable.toReadableMessage(),
                     )
@@ -447,6 +602,8 @@ class AppViewModel(
                                     isAuthenticated = true,
                                     currentUser = user,
                                     pendingMfa = null,
+                                    pendingMobileBridgeConfirmation = null,
+                                    mobileBridgeReturnUrl = null,
                                     pendingQrConfirmation = null,
                                     message = successMessage,
                                 )
@@ -474,6 +631,8 @@ class AppViewModel(
                         isBusy = false,
                         isAuthenticated = false,
                         pendingMfa = result,
+                        pendingMobileBridgeConfirmation = null,
+                        mobileBridgeReturnUrl = null,
                         pendingQrConfirmation = null,
                         message = "$sourceLabel 验证通过，请完成 MFA",
                     )

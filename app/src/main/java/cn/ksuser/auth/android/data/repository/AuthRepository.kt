@@ -9,6 +9,9 @@ import cn.ksuser.auth.android.core.session.SessionRepository
 import cn.ksuser.auth.android.data.model.AuthResult
 import cn.ksuser.auth.android.data.model.AuthSource
 import cn.ksuser.auth.android.data.model.LoginWithCodeRequest
+import cn.ksuser.auth.android.data.model.MobileBridgeApproveRequest
+import cn.ksuser.auth.android.data.model.MobileBridgeApproveResponse
+import cn.ksuser.auth.android.data.model.MobileBridgeStatusPayload
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationPayload
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationVerifyRequest
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
@@ -54,6 +57,27 @@ class AuthRepository(
 
     suspend fun approveQrChallenge(approveCode: String) {
         val envelope = executeEnvelope(gson) { api.approveQrChallenge(QrApproveRequest(approveCode.trim())) }
+        requireCode(envelope, 200)
+    }
+
+    suspend fun getMobileBridgeStatus(challengeId: String): MobileBridgeStatusPayload {
+        val envelope = executeEnvelope(gson) { api.getMobileBridgeStatus(challengeId.trim()) }
+        requireCode(envelope, 200)
+        return envelope.data ?: error("网页登录挑战状态为空")
+    }
+
+    suspend fun approveMobileBridge(challengeId: String): MobileBridgeApproveResponse {
+        val envelope = executeEnvelope(gson) {
+            api.approveMobileBridge(MobileBridgeApproveRequest(challengeId.trim()))
+        }
+        requireCode(envelope, 200)
+        return envelope.data ?: error("网页登录确认结果为空")
+    }
+
+    suspend fun cancelMobileBridge(challengeId: String) {
+        val envelope = executeEnvelope(gson) {
+            api.cancelMobileBridge(cn.ksuser.auth.android.data.model.MobileBridgeCancelRequest(challengeId.trim()))
+        }
         requireCode(envelope, 200)
     }
 

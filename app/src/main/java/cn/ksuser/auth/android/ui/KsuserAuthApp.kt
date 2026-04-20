@@ -1,5 +1,7 @@
 package cn.ksuser.auth.android.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,12 +30,16 @@ import cn.ksuser.auth.android.ui.theme.rememberAppBackgroundBrush
 import kotlinx.coroutines.launch
 
 @Composable
-fun KsuserAuthApp() {
+fun KsuserAuthApp(
+    incomingDeepLink: Uri? = null,
+    onDeepLinkConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val container = remember(context) { (context.applicationContext as KsuserAuthApplication).appContainer }
     val viewModel: AppViewModel = viewModel(factory = AppViewModelFactory(container))
     val state by viewModel.uiState.collectAsState()
     val pendingQrConfirmation = state.pendingQrConfirmation
+    val pendingMobileBridgeConfirmation = state.pendingMobileBridgeConfirmation
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -48,9 +54,31 @@ fun KsuserAuthApp() {
         }
     }
 
+    LaunchedEffect(incomingDeepLink?.toString()) {
+        val current = incomingDeepLink ?: return@LaunchedEffect
+        viewModel.handleIncomingDeepLink(current)
+        onDeepLinkConsumed()
+    }
+
+    LaunchedEffect(state.mobileBridgeReturnUrl) {
+        val returnUrl = state.mobileBridgeReturnUrl ?: return@LaunchedEffect
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(returnUrl)))
+        }
+        viewModel.consumeMobileBridgeReturnUrl()
+    }
+
     Surface(modifier = Modifier.fillMaxSize()) {
         when {
             state.isBootstrapping -> LoadingScreen()
+            pendingMobileBridgeConfirmation != null -> MobileBridgeConfirmScreen(
+                pending = pendingMobileBridgeConfirmation,
+                currentUser = state.currentUser,
+                isBusy = state.isBusy,
+                onConfirm = { viewModel.confirmMobileBridgeAction() },
+                onCancel = { viewModel.cancelMobileBridgeAction() },
+                onContinueToLogin = { viewModel.dismissMobileBridgeForLogin() },
+            )
             pendingQrConfirmation != null -> QrLoginConfirmScreen(
                 pending = pendingQrConfirmation,
                 currentUser = state.currentUser,

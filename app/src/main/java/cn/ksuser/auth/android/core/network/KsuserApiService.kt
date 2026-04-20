@@ -7,6 +7,10 @@ import cn.ksuser.auth.android.data.model.CsrfTokenResponse
 import cn.ksuser.auth.android.data.model.DeleteAccountRequest
 import cn.ksuser.auth.android.data.model.AdaptiveAuthStatus
 import cn.ksuser.auth.android.data.model.LoginWithCodeRequest
+import cn.ksuser.auth.android.data.model.MobileBridgeApproveRequest
+import cn.ksuser.auth.android.data.model.MobileBridgeApproveResponse
+import cn.ksuser.auth.android.data.model.MobileBridgeCancelRequest
+import cn.ksuser.auth.android.data.model.MobileBridgeStatusPayload
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationOptions
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationVerifyRequest
 import cn.ksuser.auth.android.data.model.PasskeyInfo
@@ -114,6 +118,21 @@ interface KsuserApiService {
     suspend fun exchangeSessionTransfer(
         @Body request: SessionTransferExchangeRequest,
     ): Response<ApiEnvelope<TokenPayload>>
+
+    @GET("/auth/mobile-bridge/status")
+    suspend fun getMobileBridgeStatus(
+        @Query("challengeId") challengeId: String,
+    ): Response<ApiEnvelope<MobileBridgeStatusPayload>>
+
+    @POST("/auth/mobile-bridge/approve")
+    suspend fun approveMobileBridge(
+        @Body request: MobileBridgeApproveRequest,
+    ): Response<ApiEnvelope<MobileBridgeApproveResponse>>
+
+    @POST("/auth/mobile-bridge/cancel")
+    suspend fun cancelMobileBridge(
+        @Body request: MobileBridgeCancelRequest,
+    ): Response<ApiEnvelope<Unit>>
 
     @POST("/auth/qr/approve")
     suspend fun approveQrChallenge(

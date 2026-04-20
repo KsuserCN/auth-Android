@@ -321,6 +321,29 @@ data class SessionTransferExchangeRequest(
     val target: String,
 )
 
+data class MobileBridgeApproveRequest(
+    val challengeId: String,
+)
+
+data class MobileBridgeCancelRequest(
+    val challengeId: String,
+)
+
+data class MobileBridgeStatusPayload(
+    val status: String,
+    val transferCode: String? = null,
+    val returnUrl: String? = null,
+    val returnOrigin: String? = null,
+    val expiresInSeconds: Long = 0,
+)
+
+data class MobileBridgeApproveResponse(
+    val challengeId: String,
+    val returnUrl: String,
+    val returnOrigin: String? = null,
+    val expiresInSeconds: Long = 0,
+)
+
 data class UpdateSettingRequest(
     val field: String,
     val value: Boolean? = null,
