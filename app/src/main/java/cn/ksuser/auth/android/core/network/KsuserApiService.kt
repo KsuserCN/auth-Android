@@ -18,6 +18,7 @@ import cn.ksuser.auth.android.data.model.PasskeyRenameRequest
 import cn.ksuser.auth.android.data.model.PaginatedSensitiveLogs
 import cn.ksuser.auth.android.data.model.PasswordLoginRequest
 import cn.ksuser.auth.android.data.model.PasswordRequirement
+import cn.ksuser.auth.android.data.model.AccountRecoveryTicket
 import cn.ksuser.auth.android.data.model.QrApproveRequest
 import cn.ksuser.auth.android.data.model.QrScanPreview
 import cn.ksuser.auth.android.data.model.RegisterRequest
@@ -117,6 +118,9 @@ interface KsuserApiService {
     suspend fun approveQrChallenge(
         @Body request: QrApproveRequest,
     ): Response<ApiEnvelope<Unit>>
+
+    @POST("/auth/account-recovery/issue")
+    suspend fun issueAccountRecoveryTicket(): Response<ApiEnvelope<AccountRecoveryTicket>>
 
     @GET("/auth/qr/preview")
     suspend fun getQrScanPreview(

@@ -41,6 +41,7 @@ enum class QrConfirmationType {
     APPROVE_LOGIN,
     APPROVE_MFA,
     APPROVE_SENSITIVE,
+    APPROVE_RECOVERY,
     LOGIN_THIS_PHONE,
     SWITCH_AND_LOGIN_THIS_PHONE,
 }
@@ -292,6 +293,7 @@ class AppViewModel(
             QrConfirmationType.APPROVE_LOGIN -> approveQrChallenge(pending.code)
             QrConfirmationType.APPROVE_MFA -> approveQrChallenge(pending.code)
             QrConfirmationType.APPROVE_SENSITIVE -> approveQrChallenge(pending.code)
+            QrConfirmationType.APPROVE_RECOVERY -> approveQrChallenge(pending.code)
             QrConfirmationType.LOGIN_THIS_PHONE,
             QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE,
             -> exchangeSessionTransferAndLogin(pending.code)
@@ -313,6 +315,7 @@ class AppViewModel(
                 val type = when (preview.codeType) {
                     "approve_mfa" -> QrConfirmationType.APPROVE_MFA
                     "approve_sensitive" -> QrConfirmationType.APPROVE_SENSITIVE
+                    "approve_recovery" -> QrConfirmationType.APPROVE_RECOVERY
                     else -> QrConfirmationType.APPROVE_LOGIN
                 }
                 PendingQrConfirmation(
@@ -559,6 +562,7 @@ class AppViewModel(
             QrConfirmationType.APPROVE_LOGIN -> "LOGIN"
             QrConfirmationType.APPROVE_MFA -> "MFA_VERIFY"
             QrConfirmationType.APPROVE_SENSITIVE -> "SENSITIVE_VERIFY"
+            QrConfirmationType.APPROVE_RECOVERY -> "ACCOUNT_RECOVERY"
             QrConfirmationType.LOGIN_THIS_PHONE -> "LOGIN_THIS_PHONE"
             QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE -> "SWITCH_AND_LOGIN_THIS_PHONE"
         }
@@ -577,6 +581,7 @@ class AppViewModel(
             "APPROVE_LOGIN", "LOGIN", "LOGIN_WEB", "LOGIN_DESKTOP" -> "LOGIN"
             "APPROVE_MFA", "MFA", "MFA_VERIFY", "VERIFY_MFA", "LOGIN_MFA" -> "MFA_VERIFY"
             "APPROVE_SENSITIVE", "SENSITIVE", "SENSITIVE_VERIFY", "VERIFY_SENSITIVE" -> "SENSITIVE_VERIFY"
+            "APPROVE_RECOVERY", "RECOVERY", "ACCOUNT_RECOVERY", "RECOVERY_ENDORSE", "RECOVERY_SPONSOR" -> "ACCOUNT_RECOVERY"
             "CHANGE_PASSWORD", "UPDATE_PASSWORD", "RESET_PASSWORD" -> "CHANGE_PASSWORD"
             "CHANGE_EMAIL", "UPDATE_EMAIL", "BIND_EMAIL" -> "CHANGE_EMAIL"
             "ADD_PASSKEY", "CREATE_PASSKEY", "REGISTER_PASSKEY" -> "ADD_PASSKEY"

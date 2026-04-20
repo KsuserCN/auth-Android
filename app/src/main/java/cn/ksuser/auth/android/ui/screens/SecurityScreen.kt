@@ -2,11 +2,13 @@ package cn.ksuser.auth.android.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Shield
@@ -65,12 +68,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import cn.ksuser.auth.android.core.app.AppIdentityProvider
 import cn.ksuser.auth.android.core.env.EnvironmentProvider
 import cn.ksuser.auth.android.data.AppContainer
+import cn.ksuser.auth.android.data.model.AccountRecoveryTicket
 import cn.ksuser.auth.android.data.model.PasskeyAvailability
 import cn.ksuser.auth.android.data.model.PasskeyListItem
 import cn.ksuser.auth.android.data.model.SensitiveVerificationStatus
@@ -89,6 +95,7 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
@@ -103,10 +110,12 @@ internal fun SecurityScreen(
     user: UserProfile?,
     onUserRefresh: () -> Unit,
     onLogoutAll: () -> Unit,
+    onOpenQrScanner: () -> Unit,
     onMessage: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val clipboardManager = LocalClipboardManager.current
     val appIdentity = remember(context) { AppIdentityProvider.current(context) }
     val passkeyAvailability = remember(container) { container.passkeyManager.availability() }
     val passkeyAvailabilityMessage = remember(container) { container.passkeyManager.availabilityMessage() }
@@ -127,8 +136,33 @@ internal fun SecurityScreen(
     var showChangeEmailDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showAccountRecoveryDialog by remember { mutableStateOf(false) }
+    var accountRecoveryTicket by remember { mutableStateOf<AccountRecoveryTicket?>(null) }
+    var accountRecoveryRemainingSeconds by remember { mutableStateOf(0L) }
+    var accountRecoveryBusy by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<PendingSecurityAction?>(null) }
+
+    suspend fun issueAccountRecoveryTicket(showCreatedMessage: Boolean = true) {
+        val hadExistingTicket = accountRecoveryTicket != null
+        accountRecoveryBusy = true
+        showAccountRecoveryDialog = true
+        runCatching { container.securityRepository.issueAccountRecoveryTicket() }
+            .onSuccess {
+                accountRecoveryTicket = it
+                accountRecoveryRemainingSeconds = it.expiresInSeconds
+                if (showCreatedMessage) {
+                    onMessage("恢复授权已生成")
+                }
+            }
+            .onFailure {
+                if (!hadExistingTicket) {
+                    showAccountRecoveryDialog = false
+                }
+                onMessage(it.message ?: "生成恢复授权失败")
+            }
+        accountRecoveryBusy = false
+    }
 
     suspend fun reloadAll() {
         busy = true
@@ -143,6 +177,14 @@ internal fun SecurityScreen(
     LaunchedEffect(user?.uuid) {
         settings = user?.settings
         reloadAll()
+    }
+
+    LaunchedEffect(showAccountRecoveryDialog, accountRecoveryTicket?.recoveryCode) {
+        if (!showAccountRecoveryDialog || accountRecoveryRemainingSeconds <= 0) return@LaunchedEffect
+        while (showAccountRecoveryDialog && accountRecoveryRemainingSeconds > 0) {
+            delay(1000)
+            accountRecoveryRemainingSeconds -= 1
+        }
     }
 
     fun requireSensitiveVerification(action: PendingSecurityAction) {
@@ -168,6 +210,16 @@ internal fun SecurityScreen(
             }
             PendingSecurityAction.ChangePassword -> {
                 showChangePasswordDialog = true
+                pendingAction = null
+            }
+            PendingSecurityAction.IssueAccountRecovery -> {
+                scope.launch {
+                    issueAccountRecoveryTicket()
+                    pendingAction = null
+                }
+            }
+            PendingSecurityAction.ScanRecoveryEndorse -> {
+                onOpenQrScanner()
                 pendingAction = null
             }
             PendingSecurityAction.DeleteAccount -> {
@@ -442,6 +494,27 @@ internal fun SecurityScreen(
             )
             LoadingOutlinedButton(text = "退出全部设备", onClick = { onLogoutAll() })
         }
+
+        SectionCard {
+            SectionHeader(
+                title = "账号恢复",
+                subtitle = "手机端既可以直接生成恢复背书，也可以扫码为忘记密码页完成背书",
+            )
+            SecurityActionCard(
+                icon = Icons.Outlined.Security,
+                title = "发起恢复背书",
+                subtitle = "生成 5 分钟有效的一次性恢复二维码和恢复码",
+                onClick = { requireSensitiveVerification(PendingSecurityAction.IssueAccountRecovery) },
+                actionLabel = "生成",
+            )
+            SecurityActionCard(
+                icon = Icons.Outlined.QrCodeScanner,
+                title = "扫码背书",
+                subtitle = "扫描忘记密码页二维码，为当前恢复请求完成背书",
+                onClick = { requireSensitiveVerification(PendingSecurityAction.ScanRecoveryEndorse) },
+                actionLabel = "扫码",
+            )
+        }
     }
 
     if (pendingTotpSetup != null) {
@@ -616,6 +689,42 @@ internal fun SecurityScreen(
                 onLogoutAll()
             },
             onMessage = onMessage,
+        )
+    }
+
+    if (showAccountRecoveryDialog) {
+        AccountRecoveryDialog(
+            ticket = accountRecoveryTicket,
+            remainingSeconds = accountRecoveryRemainingSeconds,
+            busy = accountRecoveryBusy,
+            onDismiss = {
+                showAccountRecoveryDialog = false
+                accountRecoveryTicket = null
+                accountRecoveryRemainingSeconds = 0L
+            },
+            onRefresh = { scope.launch { issueAccountRecoveryTicket(showCreatedMessage = false) } },
+            onCopyRecoveryCode = {
+                val recoveryCode = accountRecoveryTicket?.recoveryCode?.trim().orEmpty()
+                if (recoveryCode.isBlank()) {
+                    onMessage("恢复码尚未生成")
+                } else {
+                    clipboardManager.setText(AnnotatedString(recoveryCode))
+                    onMessage("恢复码已复制")
+                }
+            },
+            onOpenRecoveryPage = {
+                val currentTicket = accountRecoveryTicket
+                if (currentTicket == null) {
+                    onMessage("恢复授权尚未生成")
+                } else {
+                    val recoveryUri = buildAccountRecoveryUri(
+                        passkeyOrigin = EnvironmentProvider.current.passkeyOriginHint,
+                        apiBaseUrl = EnvironmentProvider.current.apiBaseUrl,
+                        recoveryCode = currentTicket.recoveryCode,
+                    )
+                    context.startActivity(Intent(Intent.ACTION_VIEW, recoveryUri))
+                }
+            },
         )
     }
 }
@@ -857,10 +966,132 @@ private fun CompactSecurityButton(
     }
 }
 
+private fun buildAccountRecoveryUri(
+    passkeyOrigin: String,
+    apiBaseUrl: String,
+    recoveryCode: String,
+): Uri {
+    val normalizedOrigin = passkeyOrigin.trim().ifBlank { "https://auth.ksuser.cn" }
+    val baseUri = Uri.parse(if (normalizedOrigin.endsWith("/")) normalizedOrigin else "$normalizedOrigin/")
+    return baseUri.buildUpon()
+        .path("/forgot-password")
+        .appendQueryParameter("recoveryCode", recoveryCode.trim())
+        .appendQueryParameter("apiBaseUrl", apiBaseUrl.trim())
+        .build()
+}
+
+private fun buildRemoteQrCodeImageUrl(text: String): String {
+    return Uri.Builder()
+        .scheme("https")
+        .authority("quickchart.io")
+        .appendPath("qr")
+        .appendQueryParameter("size", "240")
+        .appendQueryParameter("margin", "0")
+        .appendQueryParameter("data", text)
+        .appendQueryParameter("dark", "111111")
+        .appendQueryParameter("light", "FFFFFF")
+        .build()
+        .toString()
+}
+
+@Composable
+private fun AccountRecoveryDialog(
+    ticket: AccountRecoveryTicket?,
+    remainingSeconds: Long,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
+    onCopyRecoveryCode: () -> Unit,
+    onOpenRecoveryPage: () -> Unit,
+) {
+    val recoveryUrl = remember(ticket?.recoveryCode) {
+        ticket?.takeIf { it.recoveryCode.isNotBlank() }?.let {
+            buildAccountRecoveryUri(
+                passkeyOrigin = EnvironmentProvider.current.passkeyOriginHint,
+                apiBaseUrl = EnvironmentProvider.current.apiBaseUrl,
+                recoveryCode = it.recoveryCode,
+            ).toString()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("账号恢复授权") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S12)) {
+                Text(
+                    "为另一台设备生成一次性恢复二维码与恢复码。恢复成功后，旧会话会被自动撤销。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (busy && ticket == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (ticket != null) {
+                    recoveryUrl?.let { qrText ->
+                        AsyncImage(
+                            model = buildRemoteQrCodeImageUrl(qrText),
+                            contentDescription = "账号恢复二维码",
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .size(220.dp),
+                        )
+                    }
+                    Text(
+                        "恢复码：${ticket.recoveryCode}",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        "剩余有效期：${remainingSeconds.coerceAtLeast(0)} 秒",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "${ticket.username} · ${ticket.maskedEmail}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "背书设备：${ticket.sponsorClientName.ifBlank { "当前设备" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "位置：${ticket.sponsorIpLocation.ifBlank { "未知位置" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                        CompactSecurityButton(text = "复制恢复码", onClick = onCopyRecoveryCode)
+                        CompactSecurityButton(text = "打开恢复页", onClick = onOpenRecoveryPage)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            LoadingTextButton(
+                text = "刷新授权",
+                onClick = onRefresh,
+                enabled = !busy,
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
+}
+
 private sealed interface PendingSecurityAction {
     data object AddPasskey : PendingSecurityAction
     data object ChangeEmail : PendingSecurityAction
     data object ChangePassword : PendingSecurityAction
+    data object IssueAccountRecovery : PendingSecurityAction
+    data object ScanRecoveryEndorse : PendingSecurityAction
     data object DeleteAccount : PendingSecurityAction
     data object SetupTotp : PendingSecurityAction
     data object DisableTotp : PendingSecurityAction

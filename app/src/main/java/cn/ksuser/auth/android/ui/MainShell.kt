@@ -73,6 +73,17 @@ internal fun MainShell(
             onMessage("相机权限被拒绝，无法扫码")
         }
     }
+    fun openQrScanner() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            showQrScanner = true
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -107,17 +118,7 @@ internal fun MainShell(
                 },
                 actions = {
                     IconButton(
-                        onClick = {
-                            val granted = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA,
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (granted) {
-                                showQrScanner = true
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        },
+                        onClick = ::openQrScanner,
                     ) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = "扫码授权")
                     }
@@ -205,6 +206,7 @@ internal fun MainShell(
                     user = state.currentUser,
                     onUserRefresh = { viewModel.refreshCurrentUser() },
                     onLogoutAll = { viewModel.logoutAll() },
+                    onOpenQrScanner = ::openQrScanner,
                     onMessage = onMessage,
                 )
             }

@@ -6,6 +6,7 @@ import cn.ksuser.auth.android.core.network.requireCode
 import cn.ksuser.auth.android.data.model.ChangeEmailRequest
 import cn.ksuser.auth.android.data.model.ChangePasswordRequest
 import cn.ksuser.auth.android.data.model.DeleteAccountRequest
+import cn.ksuser.auth.android.data.model.AccountRecoveryTicket
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationPayload
 import cn.ksuser.auth.android.data.model.PasskeyInfo
 import cn.ksuser.auth.android.data.model.PasskeyListItem
@@ -28,6 +29,12 @@ class SecurityRepository(
     private val api: KsuserApiService,
     private val gson: Gson,
 ) {
+    suspend fun issueAccountRecoveryTicket(): AccountRecoveryTicket {
+        val envelope = executeEnvelope(gson) { api.issueAccountRecoveryTicket() }
+        requireCode(envelope, 200)
+        return envelope.data ?: error("恢复授权响应为空")
+    }
+
     suspend fun updateBooleanSetting(field: String, value: Boolean): UserSettings {
         val envelope = executeEnvelope(gson) { api.updateSetting(UpdateSettingRequest(field, value = value)) }
         requireCode(envelope, 200)

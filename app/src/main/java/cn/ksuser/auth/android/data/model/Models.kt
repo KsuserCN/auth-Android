@@ -235,6 +235,17 @@ data class QrScanPreview(
     val expiresInSeconds: Long = 0,
 )
 
+data class AccountRecoveryTicket(
+    val recoveryCode: String,
+    val expiresInSeconds: Long,
+    val username: String,
+    val maskedEmail: String,
+    val sponsorClientName: String,
+    val sponsorBrowser: String,
+    val sponsorSystem: String,
+    val sponsorIpLocation: String,
+)
+
 data class RegisterRequest(
     val username: String,
     val email: String,

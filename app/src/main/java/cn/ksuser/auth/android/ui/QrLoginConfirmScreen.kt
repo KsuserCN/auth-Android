@@ -431,6 +431,20 @@ private fun rememberConfirmationVisual(
             accountLabel = username,
         )
 
+        "ACCOUNT_RECOVERY" -> buildVisual(
+            pageTitle = "账号恢复背书",
+            operationLabel = "账号恢复",
+            title = "是否为当前恢复请求背书",
+            subtitle = "检测到网页端或桌面端正在请求为账号 $username 发起一次性恢复授权。确认后，对方设备可继续重置密码。",
+            securityHint = "仅当这是你本人正在恢复账号时才继续。恢复成功后，旧会话会被撤销，当前恢复设备会获得新的登录态。",
+            confirmLabel = "确认背书",
+            loadingLabel = "背书中...",
+            icon = Icons.Outlined.Security,
+            accent = MaterialTheme.colorScheme.primary,
+            accentSoft = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+            accountLabel = username,
+        )
+
         "LOGIN_THIS_PHONE" -> buildVisual(
             pageTitle = "登录此手机",
             operationLabel = "跨端登录",
@@ -512,6 +526,7 @@ private fun defaultOperationHint(type: QrConfirmationType): String {
         QrConfirmationType.APPROVE_LOGIN -> "LOGIN"
         QrConfirmationType.APPROVE_MFA -> "MFA_VERIFY"
         QrConfirmationType.APPROVE_SENSITIVE -> "SENSITIVE_VERIFY"
+        QrConfirmationType.APPROVE_RECOVERY -> "ACCOUNT_RECOVERY"
         QrConfirmationType.LOGIN_THIS_PHONE -> "LOGIN_THIS_PHONE"
         QrConfirmationType.SWITCH_AND_LOGIN_THIS_PHONE -> "SWITCH_AND_LOGIN_THIS_PHONE"
     }
