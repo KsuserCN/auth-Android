@@ -5,6 +5,7 @@ import cn.ksuser.auth.android.data.model.ChangePasswordRequest
 import cn.ksuser.auth.android.data.model.CheckUsernameResponse
 import cn.ksuser.auth.android.data.model.CsrfTokenResponse
 import cn.ksuser.auth.android.data.model.DeleteAccountRequest
+import cn.ksuser.auth.android.data.model.AdaptiveAuthStatus
 import cn.ksuser.auth.android.data.model.LoginWithCodeRequest
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationOptions
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationVerifyRequest
@@ -154,6 +155,9 @@ interface KsuserApiService {
 
     @GET("/auth/check-sensitive-verification")
     suspend fun checkSensitiveVerification(): Response<ApiEnvelope<SensitiveVerificationStatus>>
+
+    @GET("/auth/adaptive-auth/status")
+    suspend fun getAdaptiveAuthStatus(): Response<ApiEnvelope<AdaptiveAuthStatus>>
 
     @POST("/auth/verify-sensitive")
     suspend fun verifySensitive(

@@ -76,6 +76,7 @@ import coil.compose.AsyncImage
 import cn.ksuser.auth.android.core.app.AppIdentityProvider
 import cn.ksuser.auth.android.core.env.EnvironmentProvider
 import cn.ksuser.auth.android.data.AppContainer
+import cn.ksuser.auth.android.data.model.AdaptiveAuthStatus
 import cn.ksuser.auth.android.data.model.AccountRecoveryTicket
 import cn.ksuser.auth.android.data.model.PasskeyAvailability
 import cn.ksuser.auth.android.data.model.PasskeyListItem
@@ -124,6 +125,7 @@ internal fun SecurityScreen(
     var totpStatus by remember { mutableStateOf<TotpStatus?>(null) }
     var passkeys by remember { mutableStateOf<List<PasskeyListItem>>(emptyList()) }
     var sensitiveStatus by remember { mutableStateOf<SensitiveVerificationStatus?>(null) }
+    var adaptiveAuthStatus by remember { mutableStateOf<AdaptiveAuthStatus?>(null) }
     var recoveryCodes by remember { mutableStateOf<List<String>>(emptyList()) }
     var pendingTotpSetup by remember { mutableStateOf<TotpRegistrationOptions?>(null) }
     var totpCode by rememberSaveable { mutableStateOf("") }
@@ -170,6 +172,7 @@ internal fun SecurityScreen(
             totpStatus = container.securityRepository.getTotpStatus()
             passkeys = container.securityRepository.getPasskeyList()
             sensitiveStatus = container.securityRepository.getSensitiveVerificationStatus()
+            adaptiveAuthStatus = container.securityRepository.getAdaptiveAuthStatus()
         }.onFailure { onMessage(it.message ?: "安全信息加载失败") }
         busy = false
     }
@@ -380,6 +383,68 @@ internal fun SecurityScreen(
                             onMessage("首选敏感验证已更新")
                         }
                         .onFailure { onMessage(it.message ?: "更新失败") }
+                }
+            }
+        }
+
+        SectionCard {
+            SectionHeader(
+                title = "自适应连续认证",
+                subtitle = "根据当前会话环境、风险信号与最近验证状态动态判断是否需要补做验证",
+                actionText = "刷新",
+                onAction = { scope.launch { reloadAll() } },
+            )
+            val status = adaptiveAuthStatus
+            if (status == null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+            } else {
+                val tone = adaptiveRiskColor(status.riskLevel)
+                SecurityActionCard(
+                    icon = if (status.trusted) Icons.Outlined.CheckCircle else Icons.Outlined.Security,
+                    title = if (status.requiresStepUp) "建议立即补做验证" else "当前会话可信度稳定",
+                    subtitle = status.recommendedAction.ifBlank { "当前会话风险较低，可继续使用" },
+                    statusIcon = Icons.Outlined.Info,
+                    statusAccent = status.trusted,
+                    actionLabel = "${adaptiveRiskLabel(status.riskLevel)}风险 ${status.riskScore}",
+                    onClick = {
+                        if (!status.sensitiveVerified) {
+                            showSensitiveDialog = true
+                        }
+                    },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                    RiskMetaChip("敏感验证", if (status.sensitiveVerified) "有效 ${status.sensitiveVerificationRemainingSeconds} 秒" else "未验证")
+                    RiskMetaChip("会话年龄", formatDurationSeconds(status.authAgeSeconds))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                    RiskMetaChip("空闲时长", formatDurationSeconds(status.idleSeconds))
+                    RiskMetaChip("当前环境", listOfNotNull(status.currentLocation, status.deviceType).joinToString(" / ").ifBlank { "未知环境" })
+                }
+                if (status.reasons.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.S8)) {
+                        Text("风险信号", style = MaterialTheme.typography.titleSmall)
+                        status.reasons.forEach { reason ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.S8), verticalAlignment = Alignment.Top) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 6.dp)
+                                        .size(8.dp)
+                                        .background(tone, CircleShape),
+                                )
+                                Text(reason, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                if (!status.sensitiveVerified) {
+                    OutlinedButton(onClick = { showSensitiveDialog = true }) {
+                        Text("立即验证")
+                    }
                 }
             }
         }
@@ -896,6 +961,19 @@ private fun SecurityActionCard(
 }
 
 @Composable
+private fun RiskMetaChip(
+    label: String,
+    value: String,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
 private fun PasskeyCard(
     passkey: PasskeyListItem,
     onDetails: () -> Unit,
@@ -1109,6 +1187,28 @@ private fun String.toDisplayLabel(): String {
         "email-code" -> "邮箱验证码"
         else -> this
     }
+}
+
+private fun adaptiveRiskLabel(level: String): String {
+    return when (level.lowercase()) {
+        "high" -> "高"
+        "medium" -> "中"
+        else -> "低"
+    }
+}
+
+@Composable
+private fun adaptiveRiskColor(level: String) = when (level.lowercase()) {
+    "high" -> MaterialTheme.colorScheme.error
+    "medium" -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.primary
+}
+
+private fun formatDurationSeconds(seconds: Long): String {
+    if (seconds < 60) return "${seconds} 秒"
+    if (seconds < 3600) return "${seconds / 60} 分钟"
+    if (seconds < 86400) return "${seconds / 3600} 小时"
+    return "${seconds / 86400} 天"
 }
 
 private fun formatSecurityTime(value: String?): String {

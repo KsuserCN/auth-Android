@@ -6,6 +6,7 @@ import cn.ksuser.auth.android.core.network.requireCode
 import cn.ksuser.auth.android.data.model.ChangeEmailRequest
 import cn.ksuser.auth.android.data.model.ChangePasswordRequest
 import cn.ksuser.auth.android.data.model.DeleteAccountRequest
+import cn.ksuser.auth.android.data.model.AdaptiveAuthStatus
 import cn.ksuser.auth.android.data.model.AccountRecoveryTicket
 import cn.ksuser.auth.android.data.model.PasskeyAuthenticationPayload
 import cn.ksuser.auth.android.data.model.PasskeyInfo
@@ -150,6 +151,12 @@ class SecurityRepository(
         val envelope = executeEnvelope(gson) { api.checkSensitiveVerification() }
         requireCode(envelope, 200)
         return envelope.data ?: error("敏感验证状态为空")
+    }
+
+    suspend fun getAdaptiveAuthStatus(): AdaptiveAuthStatus {
+        val envelope = executeEnvelope(gson) { api.getAdaptiveAuthStatus() }
+        requireCode(envelope, 200)
+        return envelope.data ?: error("连续认证状态为空")
     }
 
     suspend fun sendSensitiveCode() {

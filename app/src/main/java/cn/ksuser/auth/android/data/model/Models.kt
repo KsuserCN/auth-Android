@@ -164,6 +164,26 @@ data class SensitiveVerificationStatus(
     val methods: List<String> = emptyList(),
 )
 
+data class AdaptiveAuthStatus(
+    val sessionId: Long? = null,
+    val riskScore: Int = 0,
+    val riskLevel: String = "low",
+    val trusted: Boolean = false,
+    val requiresStepUp: Boolean = false,
+    val sensitiveVerified: Boolean = false,
+    val sensitiveVerificationRemainingSeconds: Long = 0,
+    val authAgeSeconds: Long = 0,
+    val idleSeconds: Long = 0,
+    val currentIp: String? = null,
+    val currentLocation: String? = null,
+    val sessionIp: String? = null,
+    val sessionLocation: String? = null,
+    val browser: String? = null,
+    val deviceType: String? = null,
+    val recommendedAction: String = "",
+    val reasons: List<String> = emptyList(),
+)
+
 data class SessionItem(
     val id: Long,
     val ipAddress: String,
